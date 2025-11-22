@@ -1,6 +1,6 @@
-# Find the Words Game 🎮
+# LexiBattle 🎮⚔️
 
-A comprehensive word search puzzle game built with **React** and **Socket.IO**. Features both single-player and multiplayer modes with an intuitive drag-and-select interface.
+A comprehensive multiplayer word search battle game built with **React** and **Socket.IO**. Features both single-player and multiplayer modes with an intuitive drag-and-select interface. Battle against friends in real-time word-finding competitions!
 
 ## 🌟 Features
 
@@ -154,7 +154,7 @@ Then open `http://localhost:5173` in your browser.
 ## 🛠️ Project Structure
 
 ```
-Find-Words-Game/
+LexiBattle/
 ├── public/
 │   └── index.html          # HTML template
 ├── src/
@@ -173,7 +173,8 @@ Find-Words-Game/
 │   ├── App.jsx             # Main app component
 │   ├── main.jsx            # Entry point
 │   └── styles.css          # All styles
-├── server.js               # WebSocket server (Socket.IO)
+├── server/
+│   └── index.js            # WebSocket server (Socket.IO)
 ├── package.json            # Dependencies
 ├── vite.config.js          # Vite configuration
 └── README.md              # This file
@@ -306,4 +307,4 @@ This project is open source. Feel free to use, modify, and distribute as needed.
 
 ---
 
-**Enjoy playing Find the Words!** 🎉
+**Enjoy playing LexiBattle!** 🎉⚔️

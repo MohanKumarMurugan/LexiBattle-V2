@@ -15,7 +15,7 @@ function Header({
   return (
     <header>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <h1 style={{ margin: 0 }}>Find the Words</h1>
+        <h1 style={{ margin: 0 }}>LexiBattle</h1>
         {gameMode === 'multiplayer' && roomCode && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <div style={{ 

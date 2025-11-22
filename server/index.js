@@ -17,18 +17,23 @@ const io = new Server(server, {
 // Store rooms and players
 const rooms = new Map() // roomCode -> { players: Map<socketId, {role, score}>, gameState: {}, host: socketId, timer: {}, gameActive: false, usedWords: Set }
 
-// Master word pool (expanded for more variety)
+// Master word pool
 const MASTER_WORD_POOL = [
-  'CAT', 'DOG', 'SUN', 'MOON', 'TREE', 'BOOK', 'FISH', 'BIRD', 'STAR', 'CLOUD',
-  'COMPUTER', 'RAINBOW', 'OCEAN', 'MOUNTAIN', 'GARDEN', 'PLANET', 'CRYSTAL', 'THUNDER', 'VOLCANO', 'FOREST',
-  'JAVASCRIPT', 'ALGORITHM', 'ADVENTURE', 'BUTTERFLY', 'KNOWLEDGE', 'TELESCOPE', 'SYMPHONY', 'MYSTERY', 'DISCOVERY', 'EXPLORATION',
-  'PYTHON', 'REACT', 'NODEJS', 'MONGODB', 'EXPRESS', 'SOCKET', 'WEBSOCKET', 'DATABASE', 'GRAPHQL', 'TYPESCRIPT',
-  'FRONTEND', 'BACKEND', 'FULLSTACK', 'DEVELOPER', 'PROGRAMMER', 'SOFTWARE', 'HARDWARE', 'NETWORK', 'SECURITY', 'ENCRYPTION',
-  'AUTHENTICATION', 'VALIDATION', 'OPTIMIZATION', 'PERFORMANCE', 'SCALABILITY', 'RELIABILITY', 'EFFICIENCY', 'FUNCTIONALITY',
-  'ARCHITECTURE', 'FRAMEWORK', 'LIBRARY', 'COMPONENT', 'INTERFACE', 'PROTOCOL', 'ENDPOINT', 'RESPONSE', 'REQUEST', 'PAYLOAD',
-  'VARIABLE', 'FUNCTION', 'OBJECT', 'ARRAY', 'STRING', 'NUMBER', 'BOOLEAN', 'PROMISE', 'ASYNC', 'AWAIT',
-  'ELEPHANT', 'TIGER', 'LION', 'PANDA', 'KOALA', 'DOLPHIN', 'EAGLE', 'SHARK', 'WHALE', 'PENGUIN',
-  'CHOCOLATE', 'VANILLA', 'STRAWBERRY', 'BANANA', 'ORANGE', 'APPLE', 'GRAPE', 'WATERMELON', 'PINEAPPLE', 'MANGO'
+  'RIVER', 'OCEAN', 'FOREST', 'STORM', 'CLOUD', 'BREEZE', 'DESERT', 'MOUNTAIN', 'FLOWER', 'SUNSET',
+  'TIGER', 'ZEBRA', 'MONKEY', 'PANDA', 'KOALA', 'CAMEL', 'HORSE', 'EAGLE', 'OTTER', 'RABBIT',
+  'APPLE', 'BERRY', 'MANGO', 'LEMON', 'TOMATO', 'CARROT', 'BREAD', 'CHEESE', 'HONEY', 'OLIVES',
+  'DRAGON', 'FAIRY', 'POTION', 'WIZARD', 'CASTLE', 'SPELLS', 'SWORD', 'QUEST', 'CRYSTAL', 'PHOENIX',
+  'GALAXY', 'PLANET', 'ROBOTS', 'ATOMOS', 'ORBITS', 'LASERS', 'ASTEROID', 'NEBULA', 'ROCKET', 'GRAVITY',
+  'CHAIR', 'TABLE', 'CLOCK', 'PHONE', 'LIGHTS', 'PENCIL', 'BOTTLE', 'CAMERA', 'PILLOW', 'WALLET',
+  'SMILE', 'LAUGH', 'HAPPY', 'CALM', 'BRAVE', 'KINDLY', 'HOPEFUL', 'STRONG', 'FOCUSED', 'PEACE',
+  'SOCCER', 'CRICKET', 'TENNIS', 'SKATER', 'BOXING', 'CYCLER', 'RUNNER', 'HOCKEY', 'DANCER', 'SWIMMER',
+  'TICKET', 'JOURNEY', 'AIRPORT', 'SAFARI', 'ISLAND', 'COMPASS', 'CABINS', 'CAMPER', 'CRUISE', 'TRAILS',
+  'SERVER', 'BINARY', 'PYTHON', 'CIRCUIT', 'WIDGET', 'DRIVER', 'SCREEN', 'MODEMS', 'SOCKET',
+  'DOCTOR', 'ARTIST', 'SINGER', 'PILOTS', 'CHEFES', 'FARMER', 'ENGINEER', 'WRITER', 'TEACHER', 'BAKER',
+  'PURPLE', 'ORANGE', 'INDIGO', 'VIOLET', 'SCARLET', 'MAROON', 'TEAL', 'YELLOW', 'GREEN', 'AZURE',
+  'SUMMER', 'WINTER', 'THUNDER', 'RAINY', 'BREEZY', 'SNOWED', 'FROSTY', 'SUNNY', 'CYCLONE', 'MISTED',
+  'GOBLIN', 'ORCISH', 'MERMAID', 'TITANS', 'UNICORN', 'KRAKEN', 'SPIRIT', 'SHADOW', 'ANGELS', 'DEMONS',
+  'ENERGY', 'CANDY', 'SQUARE', 'PUZZLE', 'DREAMS', 'NINJAS', 'BLAZER', 'CANDLE', 'FROZEN', 'JELLYS'
 ].map(w => w.toUpperCase())
 
 // Generate random room code
@@ -546,7 +551,8 @@ io.on('connection', (socket) => {
     console.log(`📤 Generated unique boards for room ${roomCode}`)
   })
 
-  // Start timer (called by host)
+  // Start timer (called by host) - kept for backward compatibility
+  // Note: Timer is now automatically started in hostStartGame, but this handler remains for manual control
   socket.on('startTimer', ({ roomCode, duration = 60 }) => {
     if (!roomCode || !rooms.has(roomCode)) return
 
@@ -667,7 +673,6 @@ io.on('connection', (socket) => {
     }, 1000)
   })
 
-
   // Leave room
   socket.on('leaveRoom', ({ roomCode }) => {
     if (roomCode && rooms.has(roomCode)) {
@@ -727,3 +732,4 @@ server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
   console.log(`WebSocket server ready at ws://localhost:${PORT}`)
 })
+

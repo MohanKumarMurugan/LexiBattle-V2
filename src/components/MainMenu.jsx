@@ -6,7 +6,7 @@ function MainMenu({ onSinglePlayer, onMultiplayer }) {
   return (
     <div className="main-menu">
       <div className="menu-header">
-        <h1 className="game-title">Find the Words</h1>
+        <h1 className="game-title">LexiBattle</h1>
       </div>
 
       <div className="menu-options">
