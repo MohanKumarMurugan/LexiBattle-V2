@@ -187,6 +187,8 @@
   box-shadow: 0 6px 20px rgba(72, 187, 120, 0.4);
   text-transform: uppercase;
   letter-spacing: 1px;
+  min-width: 220px;
+  width: 220px;
 }
 
 .play-again-btn:hover {
@@ -207,6 +209,8 @@
   box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
   text-transform: uppercase;
   letter-spacing: 1px;
+  min-width: 220px;
+  width: 220px;
 }
 
 .back-to-menu-btn-large:hover {

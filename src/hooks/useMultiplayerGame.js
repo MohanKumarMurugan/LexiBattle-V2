@@ -2,14 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 
 // Word highlight colors (cycle through these)
 const WORD_COLORS = [
-  '#48bb78', // green
-  '#667eea', // purple
-  '#ed8936', // orange
-  '#e53e3e', // red
-  '#3182ce', // blue
-  '#805ad5', // violet
-  '#d69e2e', // yellow
-  '#38b2ac'  // teal
+  '#c6f6d5' // single color for all words
 ]
 
 let colorIndex = 0
@@ -580,16 +573,34 @@ export function useMultiplayerGame(socket, roomCode, role) {
   }, [])
 
   const handleCellMouseDown = useCallback((row, col) => {
-    if (!gameStarted || timer <= 0) return
+    console.log(`🖱️ Mouse down at [${row}, ${col}]`)
+    console.log(`📊 State check - gameStarted: ${gameStartedRef.current}, timer: ${timerRef.current}`)
+    console.log(`📊 Grid check - grid length: ${gridRef.current.length}, has cell: ${!!(gridRef.current[row] && gridRef.current[row][col])}`)
+    
+    if (!gameStartedRef.current) {
+      console.log('❌ Game not started, cannot select')
+      return
+    }
+    
+    if (timerRef.current <= 0) {
+      console.log('❌ Timer expired, cannot select')
+      return
+    }
+    
+    if (!gridRef.current[row] || !gridRef.current[row][col]) {
+      console.log(`❌ Invalid cell at [${row}, ${col}]`)
+      return
+    }
     
     isSelectingRef.current = true
     startCellRef.current = { row, col }
     selectedCellsRef.current = [{ row, col }]
     setSelectedCells([{ row, col }])
     
-    const selectedWord = grid[row] && grid[row][col] ? grid[row][col].letter : ''
+    const selectedWord = gridRef.current[row][col].letter || ''
     setCurrentSelection(selectedWord || '-')
-  }, [gameStarted, grid])
+    console.log(`✅ Selection started: "${selectedWord}"`)
+  }, [])
 
   const handleCellMouseOver = useCallback((row, col) => {
     if (!isSelectingRef.current || !startCellRef.current) return
@@ -599,10 +610,10 @@ export function useMultiplayerGame(socket, roomCode, role) {
     setSelectedCells(newSelection)
     
     const selectedWord = newSelection.map(({ row, col }) => 
-      grid[row] && grid[row][col] ? grid[row][col].letter : ''
+      gridRef.current[row] && gridRef.current[row][col] ? gridRef.current[row][col].letter : ''
     ).join('')
     setCurrentSelection(selectedWord || '-')
-  }, [grid, getSelectionPath])
+  }, [getSelectionPath])
 
   const handleCellMouseUp = useCallback(() => {
     if (!isSelectingRef.current) return
@@ -610,52 +621,99 @@ export function useMultiplayerGame(socket, roomCode, role) {
     isSelectingRef.current = false
     
     const selectedWord = selectedCellsRef.current.map(({ row, col }) => 
-      grid[row] && grid[row][col] ? grid[row][col].letter : ''
+      gridRef.current[row] && gridRef.current[row][col] ? gridRef.current[row][col].letter : ''
     ).join('')
+    
+    console.log(`🖱️ Mouse up. Selected word: "${selectedWord}"`)
+    console.log(`📊 Game state - gameStarted: ${gameStartedRef.current}, timer: ${timerRef.current}`)
     
     const reversedWord = selectedWord.split('').reverse().join('')
     
     let foundWordIndex = -1
-    for (let i = 0; i < words.length; i++) {
-      if (words[i] === selectedWord || words[i] === reversedWord) {
+    for (let i = 0; i < wordsRef.current.length; i++) {
+      if (wordsRef.current[i] === selectedWord || wordsRef.current[i] === reversedWord) {
         foundWordIndex = i
+        console.log(`✅ Word match found! Index: ${i}, Word: "${wordsRef.current[i]}"`)
         break
       }
     }
     
     // Don't allow word finding if timer has ended or game is not started
-    if (!gameStarted || timer <= 0) {
-      console.log('⏱️ Cannot find words - game ended or timer expired')
+    if (!gameStartedRef.current) {
+      console.log('❌ Cannot find words - game not started')
+      selectedCellsRef.current = []
+      startCellRef.current = null
+      setSelectedCells([])
+      setCurrentSelection('-')
       return
     }
     
-    if (foundWordIndex !== -1 && !foundWords.has(foundWordIndex)) {
-      const newFoundWords = new Set(foundWords)
-      newFoundWords.add(foundWordIndex)
-      setFoundWords(newFoundWords)
-      
-      const newGrid = grid.map(row => row.map(cell => ({ ...cell })))
+    if (timerRef.current <= 0) {
+      console.log('❌ Cannot find words - timer expired')
+      selectedCellsRef.current = []
+      startCellRef.current = null
+      setSelectedCells([])
+      setCurrentSelection('-')
+      return
+    }
+    
+    if (foundWordIndex === -1) {
+      console.log(`❌ Word "${selectedWord}" not found in word list:`, wordsRef.current)
+      selectedCellsRef.current = []
+      startCellRef.current = null
+      setSelectedCells([])
+      setCurrentSelection('-')
+      return
+    }
+    
+    // Check if word was already found
+    if (foundWords.has(foundWordIndex)) {
+      console.log(`⚠️ Word "${wordsRef.current[foundWordIndex]}" already found`)
+      selectedCellsRef.current = []
+      startCellRef.current = null
+      setSelectedCells([])
+      setCurrentSelection('-')
+      return
+    }
+    
+    console.log(`🎯 Found new word! "${wordsRef.current[foundWordIndex]}" at index ${foundWordIndex}`)
+    
+    // Update found words
+    setFoundWords(prev => {
+      const newSet = new Set(prev)
+      newSet.add(foundWordIndex)
+      return newSet
+    })
+    
+    // Update grid to highlight found word
+    setGrid(prevGrid => {
+      const newGrid = prevGrid.map(row => row.map(cell => ({ ...cell })))
       selectedCellsRef.current.forEach(({ row, col }) => {
         if (newGrid[row] && newGrid[row][col]) {
           newGrid[row][col].found = true
         }
       })
-      setGrid(newGrid)
-      
-      // Notify server about word found
+      return newGrid
+    })
+    
+    // Notify server about word found
+    if (socket && socket.connected) {
       socket.emit('wordFound', {
         roomCode,
         wordIndex: foundWordIndex,
-        word: words[foundWordIndex],
+        word: wordsRef.current[foundWordIndex],
         playerId: socket.id
       })
+      console.log(`📤 Sent wordFound event to server: "${wordsRef.current[foundWordIndex]}"`)
+    } else {
+      console.error('❌ Socket not connected, cannot send wordFound event')
     }
     
     selectedCellsRef.current = []
     startCellRef.current = null
     setSelectedCells([])
     setCurrentSelection('-')
-  }, [grid, words, foundWords, socket, roomCode])
+  }, [foundWords, socket, roomCode])
 
   useEffect(() => {
     const handleMouseUp = () => {
