@@ -1,12 +1,27 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState } from 'react'
+import MainMenu from './components/MainMenu'
+import MultiplayerMenu from './components/MultiplayerMenu'
+import MultiplayerGame from './components/MultiplayerGame'
 import Header from './components/Header'
 import CustomPanel from './components/CustomPanel'
 import GameBoard from './components/GameBoard'
 import Sidebar from './components/Sidebar'
 import WinModal from './components/WinModal'
 import { useGameLogic } from './hooks/useGameLogic'
+import { useSocket } from './hooks/useSocket'
 
 function App() {
+  const [view, setView] = useState('menu') // 'menu', 'singleplayer', 'multiplayer', 'multiplayer-game'
+  const [gameMode, setGameMode] = useState('singleplayer') // 'singleplayer' or 'multiplayer'
+  const [roomCode, setRoomCode] = useState(null)
+  const [opponentId, setOpponentId] = useState(null)
+  const [multiplayerRole, setMultiplayerRole] = useState(null) // 'host' or 'guest'
+
+  const { socket, connectionStatus } = useSocket()
+
+  // Debug log
+  console.log('App rendered - Current view:', view, 'Game mode:', gameMode)
+
   const {
     grid,
     words,
@@ -34,9 +49,77 @@ function App() {
     showHint,
     hintCooldown,
     selectedCells,
-    hintedCells
-  } = useGameLogic()
+    hintedCells,
+    opponentFoundWords,
+    syncGameState,
+    setMultiplayerMode
+  } = useGameLogic(gameMode, socket, roomCode)
 
+  const handleSinglePlayer = () => {
+    setGameMode('singleplayer')
+    setView('singleplayer')
+  }
+
+  const handleMultiplayer = () => {
+    setGameMode('multiplayer')
+    setView('multiplayer')
+  }
+
+  const handleRoomCreated = (code, role) => {
+    setRoomCode(code)
+    setMultiplayerRole(role)
+    setView('multiplayer-game') // Show multiplayer game
+  }
+
+  const handleRoomJoined = (code, opponentId, role) => {
+    setRoomCode(code)
+    setOpponentId(opponentId)
+    setMultiplayerRole(role)
+    setView('multiplayer-game') // Show multiplayer game
+  }
+
+  const handleBackToMenu = () => {
+    setView('menu')
+    setRoomCode(null)
+    setOpponentId(null)
+    setMultiplayerRole(null)
+    if (socket && roomCode) {
+      socket.emit('leaveRoom', { roomCode })
+    }
+  }
+
+  // Show main menu
+  if (view === 'menu') {
+    return <MainMenu onSinglePlayer={handleSinglePlayer} onMultiplayer={handleMultiplayer} />
+  }
+
+  // Show multiplayer menu
+  if (view === 'multiplayer') {
+    return (
+      <MultiplayerMenu
+        onSinglePlayer={handleBackToMenu}
+        onRoomCreated={handleRoomCreated}
+        onRoomJoined={handleRoomJoined}
+        socket={socket}
+        connectionStatus={connectionStatus}
+      />
+    )
+  }
+
+  // Show multiplayer game
+  if (view === 'multiplayer-game' && multiplayerRole) {
+    return (
+      <MultiplayerGame
+        socket={socket}
+        roomCode={roomCode}
+        role={multiplayerRole}
+        onBackToMenu={handleBackToMenu}
+        connectionStatus={connectionStatus}
+      />
+    )
+  }
+
+  // Show game (singleplayer or multiplayer)
   return (
     <div className="container">
       <Header
@@ -49,6 +132,9 @@ function App() {
         onNewGame={newGame}
         onHint={showHint}
         hintCooldown={hintCooldown}
+        gameMode={gameMode}
+        roomCode={roomCode}
+        onBackToMenu={handleBackToMenu}
       />
 
       <main className="game-area">
@@ -79,6 +165,9 @@ function App() {
             totalWords={words.length}
             timer={timer}
             currentSelection={currentSelection}
+            gameMode={gameMode}
+            roomCode={roomCode}
+            opponentFoundWords={opponentFoundWords}
           />
         </div>
       </main>
@@ -93,4 +182,3 @@ function App() {
 }
 
 export default App
-

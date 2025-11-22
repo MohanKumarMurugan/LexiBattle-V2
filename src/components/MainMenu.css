@@ -1,0 +1,97 @@
+.main-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 40px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.menu-header {
+  margin-bottom: 60px;
+}
+
+.game-title {
+  font-size: 3.5em;
+  font-weight: 700;
+  color: white;
+  text-align: center;
+  margin: 0;
+  text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.menu-options {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.menu-option-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  padding: 20px 40px;
+  border: none;
+  border-radius: 15px;
+  font-size: 20px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.single-player-option {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+}
+
+.single-player-option:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(72, 187, 120, 0.5);
+  background: linear-gradient(135deg, #38a169 0%, #48bb78 100%);
+}
+
+.multiplayer-option {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.multiplayer-option:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+}
+
+.btn-icon {
+  font-size: 28px;
+}
+
+.btn-text {
+  font-size: 18px;
+}
+
+@media (max-width: 768px) {
+  .game-title {
+    font-size: 2.5em;
+  }
+
+  .menu-option-btn {
+    padding: 18px 30px;
+    font-size: 18px;
+  }
+
+  .btn-icon {
+    font-size: 24px;
+  }
+
+  .btn-text {
+    font-size: 16px;
+  }
+}
+

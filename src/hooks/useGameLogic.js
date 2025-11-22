@@ -15,7 +15,7 @@ const saveCustomWords = (words) => {
   localStorage.setItem('findWordsCustomWords', JSON.stringify(words))
 }
 
-export function useGameLogic() {
+export function useGameLogic(gameMode = 'singleplayer', socket = null, roomCode = null) {
   const [grid, setGrid] = useState([])
   const [words, setWords] = useState([])
   const [foundWords, setFoundWords] = useState(new Set())
@@ -31,6 +31,7 @@ export function useGameLogic() {
   const [hintCooldown, setHintCooldown] = useState(false)
   const [selectedCells, setSelectedCells] = useState([])
   const [hintedCells, setHintedCells] = useState([])
+  const [opponentFoundWords, setOpponentFoundWords] = useState(new Set())
   
   const isSelectingRef = useRef(false)
   const selectedCellsRef = useRef([])
@@ -40,6 +41,7 @@ export function useGameLogic() {
   const placedWordsRef = useRef([])
   const hintedCellsRef = useRef([])
   const currentHintWordIndexRef = useRef(-1)
+  const isMultiplayerRef = useRef(gameMode === 'multiplayer')
 
   const getDirectionsForDifficulty = useCallback(() => {
     const easyDirections = [
@@ -164,8 +166,20 @@ export function useGameLogic() {
     return newGrid
   }, [])
 
+  const syncGameState = useCallback((gameState) => {
+    if (gameState.grid) setGrid(gameState.grid)
+    if (gameState.words) setWords(gameState.words)
+    if (gameState.foundWords) setFoundWords(new Set(gameState.foundWords))
+    if (gameState.opponentFoundWords) setOpponentFoundWords(new Set(gameState.opponentFoundWords))
+  }, [])
+
+  const setMultiplayerMode = useCallback((isMultiplayer) => {
+    isMultiplayerRef.current = isMultiplayer
+  }, [])
+
   const newGame = useCallback(() => {
     setFoundWords(new Set())
+    setOpponentFoundWords(new Set())
     setGameStarted(false)
     setShowWinModal(false)
     setCurrentSelection('-')
@@ -198,14 +212,103 @@ export function useGameLogic() {
     placedWordsRef.current = placedWords
     const finalGrid = fillEmptySpaces(gridWithWords, gridSize)
     setGrid(finalGrid)
-  }, [currentMode, customWords, gridSize, difficulty, generateRandomWords, createGrid, placeWords, fillEmptySpaces])
+
+    // In multiplayer, sync game state with opponent
+    if (isMultiplayerRef.current && socket && socket.connected && roomCode) {
+      socket.emit('gameStateSync', {
+        roomCode,
+        grid: finalGrid,
+        words: gameWords,
+        foundWords: [],
+        opponentFoundWords: []
+      })
+    }
+  }, [currentMode, customWords, gridSize, difficulty, generateRandomWords, createGrid, placeWords, fillEmptySpaces, socket, roomCode])
+
+  // Socket event listeners for multiplayer
+  useEffect(() => {
+    if (!socket || gameMode !== 'multiplayer') return
+
+    isMultiplayerRef.current = true
+
+    const handleOpponentJoined = (data) => {
+      console.log('Opponent joined:', data)
+    }
+
+    const handleGameStart = (data) => {
+      console.log('Game starting with shared state:', data)
+      if (data.grid && data.words) {
+        setGrid(data.grid)
+        setWords(data.words)
+        setFoundWords(new Set())
+        setOpponentFoundWords(new Set())
+        setGameStarted(true)
+        // Start timer
+        gameStartTimeRef.current = Date.now()
+        if (timerIntervalRef.current) {
+          clearInterval(timerIntervalRef.current)
+        }
+        timerIntervalRef.current = setInterval(() => {
+          const elapsed = Date.now() - gameStartTimeRef.current
+          const minutes = Math.floor(elapsed / 60000)
+          const seconds = Math.floor((elapsed % 60000) / 1000)
+          const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+          setTimer(timeString)
+        }, 1000)
+      }
+    }
+
+    const handleSyncMove = (data) => {
+      if (data.foundWordIndex !== undefined) {
+        const newOpponentFoundWords = new Set(opponentFoundWords)
+        newOpponentFoundWords.add(data.foundWordIndex)
+        setOpponentFoundWords(newOpponentFoundWords)
+      }
+    }
+
+    const handleGameStateSync = (data) => {
+      if (data.grid) setGrid(data.grid)
+      if (data.words) setWords(data.words)
+      if (data.foundWords) setFoundWords(new Set(data.foundWords))
+      if (data.opponentFoundWords) setOpponentFoundWords(new Set(data.opponentFoundWords))
+      // If game state is synced and we have both grid and words, start the game
+      if (data.grid && data.words && !gameStarted) {
+        setGameStarted(true)
+        gameStartTimeRef.current = Date.now()
+        if (timerIntervalRef.current) {
+          clearInterval(timerIntervalRef.current)
+        }
+        timerIntervalRef.current = setInterval(() => {
+          const elapsed = Date.now() - gameStartTimeRef.current
+          const minutes = Math.floor(elapsed / 60000)
+          const seconds = Math.floor((elapsed % 60000) / 1000)
+          const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+          setTimer(timeString)
+        }, 1000)
+      }
+    }
+
+    socket.on('opponentJoined', handleOpponentJoined)
+    socket.on('gameStart', handleGameStart)
+    socket.on('syncMove', handleSyncMove)
+    socket.on('gameStateSync', handleGameStateSync)
+
+    return () => {
+      socket.off('opponentJoined', handleOpponentJoined)
+      socket.off('gameStart', handleGameStart)
+      socket.off('syncMove', handleSyncMove)
+      socket.off('gameStateSync', handleGameStateSync)
+    }
+  }, [socket, gameMode, opponentFoundWords, gameStarted])
 
   useEffect(() => {
-    newGame()
+    if (gameMode === 'singleplayer') {
+      newGame()
+    }
   }, [currentMode, gridSize])
 
   useEffect(() => {
-    if (currentMode === 'random') {
+    if (currentMode === 'random' && gameMode === 'singleplayer') {
       newGame()
     }
   }, [difficulty])
@@ -278,7 +381,7 @@ export function useGameLogic() {
     isSelectingRef.current = false
     
     const selectedWord = selectedCellsRef.current.map(({ row, col }) => 
-      grid[row][col].letter
+      grid[row] && grid[row][col] ? grid[row][col].letter : ''
     ).join('')
     
     const reversedWord = selectedWord.split('').reverse().join('')
@@ -298,9 +401,21 @@ export function useGameLogic() {
       
       const newGrid = grid.map(row => row.map(cell => ({ ...cell })))
       selectedCellsRef.current.forEach(({ row, col }) => {
-        newGrid[row][col].found = true
+        if (newGrid[row] && newGrid[row][col]) {
+          newGrid[row][col].found = true
+        }
       })
       setGrid(newGrid)
+      
+      // Sync move in multiplayer mode
+      if (isMultiplayerRef.current && socket && socket.connected && roomCode) {
+        socket.emit('syncMove', {
+          roomCode,
+          foundWordIndex,
+          grid: newGrid,
+          foundWords: Array.from(newFoundWords)
+        })
+      }
       
       if (currentHintWordIndexRef.current === foundWordIndex) {
         currentHintWordIndexRef.current = -1
@@ -321,7 +436,7 @@ export function useGameLogic() {
     startCellRef.current = null
     setSelectedCells([])
     setCurrentSelection('-')
-  }, [grid, words, foundWords, timer])
+  }, [grid, words, foundWords, timer, socket, roomCode])
 
   useEffect(() => {
     const handleMouseUp = () => {
@@ -410,6 +525,7 @@ export function useGameLogic() {
     grid,
     words,
     foundWords,
+    opponentFoundWords,
     gridSize,
     currentMode,
     difficulty,
@@ -433,7 +549,9 @@ export function useGameLogic() {
     handleCellMouseDown,
     handleCellMouseOver,
     handleCellMouseUp,
-    showHint
+    showHint,
+    syncGameState,
+    setMultiplayerMode
   }
 }
 

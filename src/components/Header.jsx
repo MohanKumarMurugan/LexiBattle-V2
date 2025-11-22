@@ -7,11 +7,45 @@ function Header({
   onGridSizeChange,
   onNewGame,
   onHint,
-  hintCooldown
+  hintCooldown,
+  gameMode,
+  roomCode,
+  onBackToMenu
 }) {
   return (
     <header>
-      <h1>Find the Words</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <h1 style={{ margin: 0 }}>Find the Words</h1>
+        {gameMode === 'multiplayer' && roomCode && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <div style={{ 
+              background: 'rgba(102, 126, 234, 0.1)', 
+              padding: '8px 15px', 
+              borderRadius: '8px',
+              fontWeight: '600',
+              color: '#667eea'
+            }}>
+              Room: {roomCode}
+            </div>
+            {onBackToMenu && (
+              <button 
+                onClick={onBackToMenu}
+                style={{
+                  padding: '8px 15px',
+                  background: '#e53e3e',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                Back to Menu
+              </button>
+            )}
+          </div>
+        )}
+      </div>
       <div className="game-controls">
         <div className="mode-selector">
           <button

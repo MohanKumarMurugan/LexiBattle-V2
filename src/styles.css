@@ -508,6 +508,43 @@ h1 {
     text-decoration: line-through;
 }
 
+.words-list li.found.you-found {
+    background: #c6f6d5;
+    border-color: #9ae6b4;
+    color: #2f855a;
+    position: relative;
+}
+
+.words-list li.found.you-found::after {
+    content: ' ✓';
+    color: #2f855a;
+    font-weight: bold;
+}
+
+.words-list li.found.opponent-found {
+    background: #bee3f8;
+    border-color: #90cdf4;
+    color: #2b6cb0;
+    position: relative;
+}
+
+.words-list li.found.opponent-found::after {
+    content: ' 👤';
+    color: #2b6cb0;
+}
+
+.words-list li.found.both-found {
+    background: #faf089;
+    border-color: #f6e05e;
+    color: #744210;
+    position: relative;
+}
+
+.words-list li.found.both-found::after {
+    content: ' ✓👤';
+    color: #744210;
+}
+
 /* Game Stats */
 .game-stats {
     background: rgba(255, 255, 255, 0.95);
