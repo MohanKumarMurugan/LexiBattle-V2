@@ -298,12 +298,19 @@ export function useMultiplayerGame(socket, roomCode, role) {
       const timeRemaining = data?.timeRemaining ?? data
       const isRunning = data?.isRunning ?? true
       
+      console.log(`⏱️ [${role}] Timer sync received: ${timeRemaining}s, isRunning: ${isRunning}`)
+      
       if (typeof timeRemaining === 'number' && timeRemaining >= 0) {
         setTimer(timeRemaining)
+        timerRef.current = timeRemaining
       }
       
-      if (!isRunning && timeRemaining === 0) {
+      // Stop the game when timer reaches 0
+      if (timeRemaining === 0 || !isRunning) {
+        console.log(`⏱️ [${role}] Timer ended! Stopping game...`)
         setGameStarted(false)
+        gameStartedRef.current = false
+        // Don't set showWinnerScreen here - wait for finalResults event from server
       }
     }
 
@@ -511,7 +518,8 @@ export function useMultiplayerGame(socket, roomCode, role) {
 
   // Check if all words found (trigger new round) - per player (chain-round mechanic)
   useEffect(() => {
-    if (gameStarted && foundWords.size === words.length && words.length === 8 && timer > 0) {
+    // Only trigger chain-round if game is active, timer is running, and all words are found
+    if (gameStarted && timer > 0 && foundWords.size === words.length && words.length === 8) {
       // All words found, request new round from server
       console.log(`🎯 All ${words.length} words found! Requesting new round (chain-round)...`)
       
@@ -572,7 +580,7 @@ export function useMultiplayerGame(socket, roomCode, role) {
   }, [])
 
   const handleCellMouseDown = useCallback((row, col) => {
-    if (!gameStarted) return
+    if (!gameStarted || timer <= 0) return
     
     isSelectingRef.current = true
     startCellRef.current = { row, col }
@@ -613,6 +621,12 @@ export function useMultiplayerGame(socket, roomCode, role) {
         foundWordIndex = i
         break
       }
+    }
+    
+    // Don't allow word finding if timer has ended or game is not started
+    if (!gameStarted || timer <= 0) {
+      console.log('⏱️ Cannot find words - game ended or timer expired')
+      return
     }
     
     if (foundWordIndex !== -1 && !foundWords.has(foundWordIndex)) {

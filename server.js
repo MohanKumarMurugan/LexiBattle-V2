@@ -335,6 +335,12 @@ io.on('connection', (socket) => {
         clearInterval(room.timerInterval)
         room.timer.isRunning = false
         room.gameActive = false
+        
+        // Send final timer sync to ensure all clients know timer ended
+        io.to(roomCode).emit('timerSync', {
+          timeRemaining: 0,
+          isRunning: false
+        })
 
         // Get final scores
         const finalScores = {}
@@ -421,7 +427,17 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomCode)
     const player = room.players.get(playerId || socket.id)
     
-    if (!player || !room.gameActive) return
+    // Prevent word finding if game is not active or timer has ended
+    if (!player || !room.gameActive) {
+      console.log(`⏱️ Word finding blocked - game not active for player ${playerId || socket.id}`)
+      return
+    }
+    
+    // Check if timer has ended
+    if (!room.timer || room.timer.timeRemaining <= 0 || !room.timer.isRunning) {
+      console.log(`⏱️ Word finding blocked - timer has ended`)
+      return
+    }
 
     // Add points (10 points per word)
     player.score += 10
@@ -580,6 +596,12 @@ io.on('connection', (socket) => {
         clearInterval(room.timerInterval)
         room.timer.isRunning = false
         room.gameActive = false
+        
+        // Send final timer sync to ensure all clients know timer ended
+        io.to(roomCode).emit('timerSync', {
+          timeRemaining: 0,
+          isRunning: false
+        })
 
         // Get final scores
         const finalScores = {}

@@ -71,8 +71,8 @@ function MultiplayerGame({
               <div className="role-badge">
                 {role === 'host' ? '👑 Host' : '👤 Guest'}
               </div>
-              <div className={`shared-timer ${timer <= 10 ? 'timer-warning' : ''}`}>
-                ⏱️ {typeof timer === 'number' ? `${timer}s` : '60s'}
+              <div className={`shared-timer ${timer <= 10 && timer > 0 ? 'timer-warning' : timer === 0 ? 'timer-ended' : ''}`}>
+                ⏱️ {typeof timer === 'number' ? (timer > 0 ? `${timer}s` : 'TIME UP!') : '60s'}
               </div>
             </div>
             <div className="header-right">
