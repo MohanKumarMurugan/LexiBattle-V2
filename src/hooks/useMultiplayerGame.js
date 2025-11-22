@@ -185,8 +185,8 @@ export function useMultiplayerGame(socket, roomCode, role) {
     console.log(`🔌 [${role}] Setting up WebSocket listeners for room: ${roomCode}`)
 
 
-    const handleGenerateBoards = ({ words: newWords, role: playerRole }) => {
-      console.log(`📋 [${playerRole}] Generating board with words:`, newWords)
+    const handleGenerateBoards = ({ words: newWords, grid: serverGrid, role: playerRole }) => {
+      console.log(`📋 [${playerRole}] Received board data from server`)
       
       if (!newWords || newWords.length === 0) {
         console.error('❌ No words received for board generation')
@@ -195,24 +195,32 @@ export function useMultiplayerGame(socket, roomCode, role) {
       }
 
       try {
-        // Generate board with these words
-        console.log(`🔨 [${playerRole}] Starting board generation with ${newWords.length} words...`)
-        const finalGrid = generateBoardFromWords(newWords)
+        let finalGrid
+        
+        // Use server-generated grid if provided (ensures identical boards for both players)
+        if (serverGrid && Array.isArray(serverGrid) && serverGrid.length > 0) {
+          console.log(`✅ [${playerRole}] Using server-generated grid`)
+          finalGrid = serverGrid
+        } else {
+          // Fallback: generate board locally if server didn't send grid
+          console.log(`⚠️ [${playerRole}] Server grid not provided, generating locally (fallback)`)
+          finalGrid = generateBoardFromWords(newWords)
+        }
         
         // Validate grid
         if (!finalGrid || !Array.isArray(finalGrid) || finalGrid.length === 0) {
-          console.error('❌ Failed to generate grid - invalid result:', finalGrid)
-          alert('Failed to generate game board. Please try again.')
+          console.error('❌ Failed to get grid - invalid result:', finalGrid)
+          alert('Failed to get game board. Please try again.')
           return
         }
         
         if (!finalGrid[0] || !Array.isArray(finalGrid[0]) || finalGrid[0].length === 0) {
-          console.error('❌ Failed to generate grid - invalid row structure')
-          alert('Failed to generate game board. Please try again.')
+          console.error('❌ Failed to get grid - invalid row structure')
+          alert('Failed to get game board. Please try again.')
           return
         }
         
-        console.log(`✅ [${playerRole}] Board generated successfully, grid size: ${finalGrid.length}x${finalGrid[0]?.length || 0}`)
+        console.log(`✅ [${playerRole}] Board ready, grid size: ${finalGrid.length}x${finalGrid[0]?.length || 0}`)
         console.log(`📊 [${playerRole}] Grid sample (first row):`, finalGrid[0]?.map(cell => cell?.letter || '?').join(''))
         
         // Update state - use functional update to ensure we're setting the latest state
@@ -255,10 +263,9 @@ export function useMultiplayerGame(socket, roomCode, role) {
         setShowWinnerScreen(false)
         
         console.log(`✅ [${playerRole}] Board ready! Grid: ${finalGrid.length}x${finalGrid[0]?.length}, Words: ${newWords.length}`)
-        console.log(`📊 [${playerRole}] Grid sample (first row):`, finalGrid[0]?.map(cell => cell.letter).join(''))
       } catch (error) {
-        console.error('❌ Error generating board:', error)
-        alert(`Failed to generate game board: ${error.message}. Please try again.`)
+        console.error('❌ Error processing board:', error)
+        alert(`Failed to process game board: ${error.message}. Please try again.`)
       }
     }
 
@@ -364,7 +371,7 @@ export function useMultiplayerGame(socket, roomCode, role) {
     }
 
     // Handle nextBoard event (chain-round mechanic)
-    const handleNextBoard = ({ words: newWords, round, message }) => {
+    const handleNextBoard = ({ words: newWords, grid: serverGrid, round, message }) => {
       console.log(`🔄 [${role}] Next board received for round ${round}:`, newWords)
       
       if (!newWords || newWords.length === 0) {
@@ -378,8 +385,16 @@ export function useMultiplayerGame(socket, roomCode, role) {
         return
       }
 
-      // Generate new board with new words
-      const finalGrid = generateBoardFromWords(newWords)
+      // Use server-generated grid if provided (ensures identical boards)
+      let finalGrid
+      if (serverGrid && Array.isArray(serverGrid) && serverGrid.length > 0) {
+        console.log(`✅ [${role}] Using server-generated grid for round ${round}`)
+        finalGrid = serverGrid
+      } else {
+        // Fallback: generate board locally
+        console.log(`⚠️ [${role}] Server grid not provided, generating locally (fallback)`)
+        finalGrid = generateBoardFromWords(newWords)
+      }
       
       setGrid(finalGrid)
       setWords(newWords)
@@ -388,7 +403,7 @@ export function useMultiplayerGame(socket, roomCode, role) {
       usedWordsRef.current = new Set([...usedWordsRef.current, ...newWords])
       currentRoundRef.current = round
       
-      console.log(`✅ [${role}] New board generated for round ${round}`)
+      console.log(`✅ [${role}] New board ready for round ${round}`)
     }
 
     const handleFinalResults = ({ scores, winner, loser, isTie, hostScore, guestScore, hostWordsFound, guestWordsFound }) => {

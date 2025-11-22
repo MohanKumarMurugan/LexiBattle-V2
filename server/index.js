@@ -36,6 +36,100 @@ const MASTER_WORD_POOL = [
   'ENERGY', 'CANDY', 'SQUARE', 'PUZZLE', 'DREAMS', 'NINJAS', 'BLAZER', 'CANDLE', 'FROZEN', 'JELLYS'
 ].map(w => w.toUpperCase())
 
+// Board generation functions (server-side)
+function createGrid(size = 10) {
+  const grid = []
+  for (let i = 0; i < size; i++) {
+    grid[i] = []
+    for (let j = 0; j < size; j++) {
+      grid[i][j] = {
+        letter: '',
+        isWordLetter: false,
+        wordIndex: -1,
+        found: false
+      }
+    }
+  }
+  return grid
+}
+
+function canPlaceWord(grid, word, startRow, startCol, direction, gridSize) {
+  for (let i = 0; i < word.length; i++) {
+    const row = startRow + i * direction.dx
+    const col = startCol + i * direction.dy
+    if (row < 0 || row >= gridSize || col < 0 || col >= gridSize) {
+      return false
+    }
+    const cell = grid[row][col]
+    if (cell.letter !== '' && cell.letter !== word[i]) {
+      return false
+    }
+  }
+  return true
+}
+
+function placeWords(grid, words, gridSize) {
+  const allDirections = [
+    { dx: 0, dy: 1 }, { dx: 1, dy: 0 }, { dx: 1, dy: 1 }, { dx: 1, dy: -1 },
+    { dx: 0, dy: -1 }, { dx: -1, dy: 0 }, { dx: -1, dy: -1 }, { dx: -1, dy: 1 }
+  ]
+  
+  const newGrid = grid.map(row => row.map(cell => ({ ...cell })))
+  const placedWords = []
+
+  for (let wordIndex = 0; wordIndex < words.length; wordIndex++) {
+    const word = words[wordIndex]
+    let placed = false
+    let attempts = 0
+    const maxAttempts = 200
+
+    while (!placed && attempts < maxAttempts) {
+      const direction = allDirections[Math.floor(Math.random() * allDirections.length)]
+      const startRow = Math.floor(Math.random() * gridSize)
+      const startCol = Math.floor(Math.random() * gridSize)
+
+      if (canPlaceWord(newGrid, word, startRow, startCol, direction, gridSize)) {
+        for (let i = 0; i < word.length; i++) {
+          const row = startRow + i * direction.dx
+          const col = startCol + i * direction.dy
+          newGrid[row][col] = {
+            letter: word[i],
+            isWordLetter: true,
+            wordIndex: wordIndex,
+            found: false
+          }
+        }
+        placedWords[wordIndex] = { word, startRow, startCol, direction }
+        placed = true
+      }
+      attempts++
+    }
+  }
+
+  return { grid: newGrid, placedWords }
+}
+
+function fillEmptySpaces(grid, gridSize) {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  const newGrid = grid.map(row => row.map(cell => ({ ...cell })))
+  
+  for (let i = 0; i < gridSize; i++) {
+    for (let j = 0; j < gridSize; j++) {
+      if (newGrid[i][j].letter === '') {
+        newGrid[i][j].letter = letters[Math.floor(Math.random() * letters.length)]
+      }
+    }
+  }
+  return newGrid
+}
+
+function generateBoardFromWords(words) {
+  const emptyGrid = createGrid(10)
+  const { grid: gridWithWords } = placeWords(emptyGrid, words, 10)
+  const finalGrid = fillEmptySpaces(gridWithWords, 10)
+  return finalGrid
+}
+
 // Generate random room code
 function generateRoomCode() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -136,87 +230,58 @@ io.on('connection', (socket) => {
     console.log(`Guest ${socket.id} joined room ${roomCode}`)
   })
 
-  // Generate unique word sets for host and guest (ensuring no overlap)
-  function generateUniqueWordSets(room) {
+  // Generate shared word set for both players (same puzzle)
+  function generateSharedWordSet(room) {
     // Get all words that have been used in this room
     const allUsedWords = new Set([...room.usedWords])
     
     // Filter out used words from master pool
     const availableWords = MASTER_WORD_POOL.filter(w => !allUsedWords.has(w))
     
-    if (availableWords.length < 16) {
-      // If we're running low on words, reset the used words set (but keep player-specific tracking)
+    if (availableWords.length < 8) {
+      // If we're running low on words, reset the used words set
       console.log('⚠️ Running low on words, resetting room used words pool')
       room.usedWords.clear()
-      // But keep player-specific tracking to avoid immediate repeats
-      const playerUsedWords = new Set([...room.hostUsedWords, ...room.guestUsedWords])
-      const freshWords = MASTER_WORD_POOL.filter(w => !playerUsedWords.has(w))
-      if (freshWords.length >= 16) {
-        const shuffled = [...freshWords].sort(() => Math.random() - 0.5)
-        const hostWords = shuffled.slice(0, 8)
-        const guestWords = shuffled.slice(8, 16)
-        
-        // Update tracking
-        hostWords.forEach(w => {
-          room.usedWords.add(w)
-          room.hostUsedWords.add(w)
-        })
-        guestWords.forEach(w => {
-          room.usedWords.add(w)
-          room.guestUsedWords.add(w)
-        })
-        
-        return { hostWords, guestWords }
-      }
+      const freshWords = [...MASTER_WORD_POOL]
+      const shuffled = freshWords.sort(() => Math.random() - 0.5)
+      const sharedWords = shuffled.slice(0, 8)
+      
+      // Update tracking
+      sharedWords.forEach(w => {
+        room.usedWords.add(w)
+      })
+      
+      return sharedWords
     }
     
-    // Shuffle available words and select unique sets
+    // Shuffle available words and select 8 words for both players
     const shuffled = [...availableWords].sort(() => Math.random() - 0.5)
-    const hostWords = shuffled.slice(0, 8)
-    const guestWords = shuffled.slice(8, 16)
+    const sharedWords = shuffled.slice(0, 8)
     
     // Update tracking
-    hostWords.forEach(w => {
+    sharedWords.forEach(w => {
       room.usedWords.add(w)
-      room.hostUsedWords.add(w)
-    })
-    guestWords.forEach(w => {
-      room.usedWords.add(w)
-      room.guestUsedWords.add(w)
     })
     
-    return { hostWords, guestWords }
+    return sharedWords
   }
 
-  // Generate new unique words for a player (for chain-rounds)
-  function generateNewWordsForPlayer(room, role) {
-    const playerUsedWords = role === 'host' ? room.hostUsedWords : room.guestUsedWords
-    
-    // Get words not used by this player
-    const availableWords = MASTER_WORD_POOL.filter(w => !playerUsedWords.has(w))
+  // Generate new shared words for both players (for chain-rounds)
+  function generateNewSharedWords(room) {
+    // Get words not used in this room
+    const availableWords = MASTER_WORD_POOL.filter(w => !room.usedWords.has(w))
     
     if (availableWords.length < 8) {
-      // Reset player-specific tracking if needed
-      console.log(`⚠️ Running low on words for ${role}, resetting player word pool`)
-      if (role === 'host') {
-        room.hostUsedWords.clear()
-      } else {
-        room.guestUsedWords.clear()
-      }
-      // Use all words except those used by opponent
-      const opponentUsedWords = role === 'host' ? room.guestUsedWords : room.hostUsedWords
-      const freshWords = MASTER_WORD_POOL.filter(w => !opponentUsedWords.has(w))
-      const shuffled = [...freshWords].sort(() => Math.random() - 0.5)
+      // Reset used words if running low
+      console.log(`⚠️ Running low on words, resetting room word pool`)
+      room.usedWords.clear()
+      const freshWords = [...MASTER_WORD_POOL]
+      const shuffled = freshWords.sort(() => Math.random() - 0.5)
       const newWords = shuffled.slice(0, 8)
       
       // Update tracking
       newWords.forEach(w => {
         room.usedWords.add(w)
-        if (role === 'host') {
-          room.hostUsedWords.add(w)
-        } else {
-          room.guestUsedWords.add(w)
-        }
       })
       
       return newWords
@@ -228,11 +293,6 @@ io.on('connection', (socket) => {
     // Update tracking
     newWords.forEach(w => {
       room.usedWords.add(w)
-      if (role === 'host') {
-        room.hostUsedWords.add(w)
-      } else {
-        room.guestUsedWords.add(w)
-      }
     })
     
     return newWords
@@ -277,31 +337,23 @@ io.on('connection', (socket) => {
     room.hostUsedWords.clear()
     room.guestUsedWords.clear()
 
-    // Generate unique word sets (no overlap between host and guest)
-    const { hostWords, guestWords } = generateUniqueWordSets(room)
+    // Generate shared word set (same puzzle for both players)
+    const sharedWords = generateSharedWordSet(room)
     
-    // Store word sets in room
-    room.hostWords = hostWords
-    room.guestWords = guestWords
+    // Generate the board on server to ensure both players get identical layout
+    const sharedBoard = generateBoardFromWords(sharedWords)
+    
+    // Store shared word set and board in room
+    room.sharedWords = sharedWords
+    room.sharedBoard = sharedBoard
 
-    // Find host and guest socket IDs
-    const hostId = room.host
-    const guestId = Array.from(room.players.keys()).find(id => id !== hostId)
-
-    // Send different boards to host and guest FIRST
-    console.log(`📤 Sending host board to ${hostId}`)
-    socket.emit('generateBoards', {
-      words: hostWords,
-      role: 'host'
+    // Send the same words and board to both players
+    console.log(`📤 Sending shared puzzle to both players: ${sharedWords.join(', ')}`)
+    io.to(roomCode).emit('generateBoards', {
+      words: sharedWords,
+      grid: sharedBoard,
+      role: 'shared'
     })
-
-    if (guestId) {
-      console.log(`📤 Sending guest board to ${guestId}`)
-      io.to(guestId).emit('generateBoards', {
-        words: guestWords,
-        role: 'guest'
-      })
-    }
 
     // Start the timer immediately
     if (room.timerInterval) {
@@ -483,20 +535,28 @@ io.on('connection', (socket) => {
       return
     }
 
-    // Generate new unique words for this player (ensuring no overlap with opponent)
-    const newWords = generateNewWordsForPlayer(room, role)
+    // Generate new shared words for both players (same puzzle)
+    const newWords = generateNewSharedWords(room)
+
+    // Generate the board on server to ensure both players get identical layout
+    const newBoard = generateBoardFromWords(newWords)
+
+    // Update shared word set and board in room
+    room.sharedWords = newWords
+    room.sharedBoard = newBoard
 
     // Update player's current round
     player.currentRound = (player.currentRound || 1) + 1
 
-    // Send new board words to this player only (they'll generate the board client-side)
-    io.to(playerId || socket.id).emit('nextBoard', {
+    // Send new board and words to BOTH players (same puzzle)
+    io.to(roomCode).emit('nextBoard', {
       words: newWords,
+      grid: newBoard,
       round: player.currentRound,
       message: `Round ${player.currentRound} started! Keep going!`
     })
 
-    console.log(`🔄 Round ${player.currentRound} started for ${role} ${playerId || socket.id} in room ${roomCode}. New words: ${newWords.join(', ')}`)
+    console.log(`🔄 Round ${player.currentRound} started for both players in room ${roomCode}. New words: ${newWords.join(', ')}`)
   })
 
   // Timer sync (server maintains master timer)
@@ -513,7 +573,7 @@ io.on('connection', (socket) => {
     }
   })
 
-  // Generate unique boards event (for explicit board generation requests)
+  // Generate shared boards event (for explicit board generation requests)
   socket.on('generateUniqueBoards', ({ roomCode }) => {
     if (!roomCode || !rooms.has(roomCode)) return
 
@@ -524,31 +584,24 @@ io.on('connection', (socket) => {
       return
     }
 
-    // Generate unique word sets
-    const { hostWords, guestWords } = generateUniqueWordSets(room)
+    // Generate shared word set (same puzzle for both players)
+    const sharedWords = generateSharedWordSet(room)
     
-    // Store word sets
-    room.hostWords = hostWords
-    room.guestWords = guestWords
+    // Generate the board on server to ensure both players get identical layout
+    const sharedBoard = generateBoardFromWords(sharedWords)
+    
+    // Store shared word set and board
+    room.sharedWords = sharedWords
+    room.sharedBoard = sharedBoard
 
-    // Find host and guest socket IDs
-    const hostId = room.host
-    const guestId = Array.from(room.players.keys()).find(id => id !== hostId)
-
-    // Send different word sets to host and guest
-    io.to(hostId).emit('generateBoards', {
-      words: hostWords,
-      role: 'host'
+    // Send same word set and board to both players
+    io.to(roomCode).emit('generateBoards', {
+      words: sharedWords,
+      grid: sharedBoard,
+      role: 'shared'
     })
 
-    if (guestId) {
-      io.to(guestId).emit('generateBoards', {
-        words: guestWords,
-        role: 'guest'
-      })
-    }
-
-    console.log(`📤 Generated unique boards for room ${roomCode}`)
+    console.log(`📤 Generated shared puzzle for room ${roomCode}: ${sharedWords.join(', ')}`)
   })
 
   // Start timer (called by host) - kept for backward compatibility

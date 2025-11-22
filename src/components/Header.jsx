@@ -15,7 +15,14 @@ function Header({
   return (
     <header>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <h1 style={{ margin: 0 }}>LexiBattle</h1>
+        <h1 style={{ 
+          margin: 0, 
+          background: 'linear-gradient(135deg, #ec4899 0%, #be185d 50%, #9f1239 100%)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text',
+          filter: 'drop-shadow(0 2px 4px rgba(236, 72, 153, 0.3))'
+        }}>LexiBattle</h1>
         {gameMode === 'multiplayer' && roomCode && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <div style={{ 
