@@ -9,6 +9,7 @@ import Sidebar from './components/Sidebar'
 import WinModal from './components/WinModal'
 import { useGameLogic } from './hooks/useGameLogic'
 import { useSocket } from './hooks/useSocket'
+import { useWallet } from './hooks/useWallet'
 
 function App() {
   const [view, setView] = useState('menu') // 'menu', 'singleplayer', 'multiplayer', 'multiplayer-game'
@@ -18,6 +19,7 @@ function App() {
   const [multiplayerRole, setMultiplayerRole] = useState(null) // 'host' or 'guest'
 
   const { socket, connectionStatus } = useSocket()
+  const walletHook = useWallet()
 
   // Debug log
   console.log('App rendered - Current view:', view, 'Game mode:', gameMode)
@@ -130,7 +132,9 @@ function App() {
         onDifficultyChange={setDifficulty}
         onGridSizeChange={setGridSize}
         onNewGame={newGame}
-        onHint={showHint}
+        onHint={() => showHint(walletHook)}
+        walletAddress={walletHook.account}
+        onWalletConnect={walletHook.connectWallet}
         hintCooldown={hintCooldown}
         gameMode={gameMode}
         roomCode={roomCode}

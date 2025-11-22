@@ -1,0 +1,125 @@
+.wallet-connect-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.wallet-required-notice {
+  padding: 10px 15px;
+  background: rgba(255, 193, 7, 0.2);
+  border: 1px solid rgba(255, 193, 7, 0.5);
+  border-radius: 8px;
+  color: #856404;
+  font-weight: 600;
+  font-size: 14px;
+  text-align: center;
+}
+
+.wallet-connect-btn {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #f6851b 0%, #e2761b 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(246, 133, 27, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wallet-connect-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(246, 133, 27, 0.4);
+}
+
+.wallet-connect-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.wallet-connected {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 10px 15px;
+  background: rgba(72, 187, 120, 0.1);
+  border: 1px solid rgba(72, 187, 120, 0.3);
+  border-radius: 12px;
+}
+
+.wallet-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wallet-icon {
+  font-size: 24px;
+}
+
+.wallet-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wallet-address {
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 14px;
+  font-family: 'Courier New', monospace;
+}
+
+.wallet-balance {
+  font-size: 12px;
+  color: #718096;
+  font-weight: 500;
+}
+
+.wallet-disconnect-btn {
+  padding: 6px 12px;
+  background: #e53e3e;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.wallet-disconnect-btn:hover {
+  background: #c53030;
+}
+
+.wallet-error {
+  padding: 8px 12px;
+  background: rgba(229, 62, 62, 0.1);
+  border: 1px solid rgba(229, 62, 62, 0.3);
+  border-radius: 8px;
+  color: #c53030;
+  font-size: 12px;
+  text-align: center;
+  margin-top: 5px;
+}
+
+.wallet-install-notice {
+  margin-top: 5px;
+  font-size: 12px;
+}
+
+.wallet-install-notice a {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.wallet-install-notice a:hover {
+  text-decoration: underline;
+}
+

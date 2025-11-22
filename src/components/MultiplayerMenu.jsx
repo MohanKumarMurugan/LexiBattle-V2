@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import './MultiplayerMenu.css'
+import WalletConnect from './WalletConnect'
+import { useWallet } from '../hooks/useWallet'
 
 function MultiplayerMenu({ 
   onSinglePlayer, 
@@ -14,6 +16,11 @@ function MultiplayerMenu({
   const [isJoiningRoom, setIsJoiningRoom] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [betAmount, setBetAmount] = useState(0.001) // Default bet: 0.001 ETH
+  const [hostBetPlaced, setHostBetPlaced] = useState(false)
+  const [guestBetPlaced, setGuestBetPlaced] = useState(false)
+  
+  const walletHook = useWallet()
 
   useEffect(() => {
     if (!socket) return
@@ -64,11 +71,27 @@ function MultiplayerMenu({
       setSuccess('Opponent joined! Ready to start.')
     }
 
+    const handlePlayerBetPlaced = (data) => {
+      if (data.role === 'host') {
+        setHostBetPlaced(true)
+        setSuccess('Host bet placed! Waiting for guest...')
+      } else if (data.role === 'guest') {
+        setGuestBetPlaced(true)
+        setSuccess('Guest bet placed! Both players ready!')
+      }
+    }
+
+    const handleBothPlayersReady = (data) => {
+      setSuccess('Both players have placed bets! Game can start.')
+    }
+
     socket.on('hostCreatedRoom', handleHostCreatedRoom)
     socket.on('guestJoinedRoom', handleGuestJoinedRoom)
     socket.on('opponentJoined', handleOpponentJoined)
     socket.on('joinError', handleJoinError)
     socket.on('createError', handleCreateError)
+    socket.on('playerBetPlaced', handlePlayerBetPlaced)
+    socket.on('bothPlayersReady', handleBothPlayersReady)
 
     return () => {
       socket.off('hostCreatedRoom', handleHostCreatedRoom)
@@ -76,10 +99,12 @@ function MultiplayerMenu({
       socket.off('opponentJoined', handleOpponentJoined)
       socket.off('joinError', handleJoinError)
       socket.off('createError', handleCreateError)
+      socket.off('playerBetPlaced', handlePlayerBetPlaced)
+      socket.off('bothPlayersReady', handleBothPlayersReady)
     }
   }, [socket, onRoomCreated, onRoomJoined])
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = async () => {
     if (!socket) {
       setError('Socket not initialized. Please refresh the page.')
       return
@@ -88,22 +113,58 @@ function MultiplayerMenu({
       setError('Not connected to server. Make sure the server is running on port 4000.')
       return
     }
+    if (!walletHook.account) {
+      setError('Please connect your MetaMask wallet first.')
+      return
+    }
+    
     setError('')
     setSuccess('')
-    setIsCreatingRoom(true)
-    console.log('Creating room...')
-    socket.emit('createRoom')
     
-    // Timeout after 10 seconds
-    setTimeout(() => {
-      if (isCreatingRoom) {
-        setIsCreatingRoom(false)
-        setError('Room creation timed out. Please try again.')
+    try {
+      setIsCreatingRoom(true)
+      console.log('Creating room...')
+      
+      // Emit wallet connection
+      socket.emit('playerWalletConnected', {
+        walletAddress: walletHook.account,
+        role: 'host'
+      })
+      
+      // Place bet only if bet amount is greater than 0
+      let txHash = null
+      if (betAmount > 0) {
+        const recipientAddress = '0x0000000000000000000000000000000000000000' // Replace with your game wallet
+        setSuccess('Placing bet...')
+        txHash = await walletHook.placeBet(recipientAddress, betAmount)
+        console.log('Bet placed:', txHash)
+      } else {
+        setSuccess('Creating room with free bet...')
       }
-    }, 10000)
+      
+      socket.emit('playerBetPlaced', {
+        walletAddress: walletHook.account,
+        betAmount: betAmount,
+        txHash: txHash,
+        role: 'host'
+      })
+      
+      socket.emit('createRoom')
+      
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        if (isCreatingRoom) {
+          setIsCreatingRoom(false)
+          setError('Room creation timed out. Please try again.')
+        }
+      }, 10000)
+    } catch (err) {
+      setError(`Bet failed: ${err.message}`)
+      setIsCreatingRoom(false)
+    }
   }
 
-  const handleJoinRoom = () => {
+  const handleJoinRoom = async () => {
     if (!socket || !socket.connected) {
       setError('Not connected to server')
       return
@@ -112,9 +173,40 @@ function MultiplayerMenu({
       setError('Please enter a room code')
       return
     }
+    if (!walletHook.account) {
+      setError('Please connect your MetaMask wallet first.')
+      return
+    }
+    
     setError('')
+    
+    try {
+      // Place bet first
+      const recipientAddress = '0x0000000000000000000000000000000000000000' // Replace with your game wallet
+      setSuccess('Placing bet...')
+      const txHash = await walletHook.placeBet(recipientAddress, betAmount)
+      console.log('Bet placed:', txHash)
+      
     setIsJoiningRoom(true)
+      
+      // Emit wallet connection and bet
+      socket.emit('playerWalletConnected', {
+        walletAddress: walletHook.account,
+        role: 'guest'
+      })
+      
+      socket.emit('playerBetPlaced', {
+        walletAddress: walletHook.account,
+        betAmount: betAmount,
+        txHash: txHash,
+        role: 'guest'
+      })
+      
     socket.emit('joinRoom', { roomCode: roomCode.trim().toUpperCase() })
+    } catch (err) {
+      setError(`Bet failed: ${err.message}`)
+      setIsJoiningRoom(false)
+    }
   }
 
   const handleRoomCodeChange = (e) => {
@@ -150,6 +242,35 @@ function MultiplayerMenu({
           <span className="status-text">
             {connectionStatus === 'connected' ? 'Connected' : 'Disconnected'}
           </span>
+        </div>
+
+        <div className="wallet-section">
+          <WalletConnect 
+            onConnect={() => {}}
+            required={true}
+            betAmount={betAmount}
+          />
+        </div>
+
+        <div className="bet-section">
+          <label htmlFor="betAmount" className="bet-label">Bet Amount (ETH):</label>
+          <input
+            type="number"
+            id="betAmount"
+            className="bet-input"
+            value={betAmount}
+            onChange={(e) => setBetAmount(parseFloat(e.target.value) || 0)}
+            min="0"
+            step="0.001"
+            disabled={isCreatingRoom || isJoiningRoom}
+          />
+          <div className="bet-info">
+            {betAmount === 0 ? (
+              <>🎮 <strong>Friendly Match:</strong> No bet required! Perfect for practice games.</>
+            ) : (
+              <>💰 Both players must place the same bet. Winner takes all!</>
+            )}
+          </div>
         </div>
 
         <button 

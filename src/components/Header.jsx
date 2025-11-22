@@ -1,3 +1,6 @@
+import './Header.css'
+import WalletConnect from './WalletConnect'
+
 function Header({
   currentMode,
   difficulty,
@@ -10,7 +13,9 @@ function Header({
   hintCooldown,
   gameMode,
   roomCode,
-  onBackToMenu
+  onBackToMenu,
+  walletAddress,
+  onWalletConnect
 }) {
   return (
     <header>
@@ -103,10 +108,19 @@ function Header({
           New Game
         </button>
         
+        {gameMode === 'singleplayer' && (
+          <div className="wallet-section">
+            <WalletConnect 
+              onConnect={onWalletConnect}
+              required={false}
+            />
+          </div>
+        )}
         <button
           className="hint-btn"
           onClick={onHint}
-          disabled={hintCooldown}
+          disabled={hintCooldown || (gameMode === 'singleplayer' && !walletAddress)}
+          title={gameMode === 'singleplayer' && !walletAddress ? 'Connect wallet to use hints' : ''}
         >
           {hintCooldown ? '⏰ Wait...' : '💡 Hint'}
         </button>

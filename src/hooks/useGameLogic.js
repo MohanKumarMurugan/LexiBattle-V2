@@ -449,40 +449,101 @@ export function useGameLogic(gameMode = 'singleplayer', socket = null, roomCode 
     return () => document.removeEventListener('mouseup', handleMouseUp)
   }, [handleCellMouseUp])
 
-  const showHint = useCallback(() => {
+  const showHint = useCallback(async (walletHook = null) => {
     if (!gameStarted || hintCooldown) return
     
-    const unfoundWordIndices = []
-    for (let i = 0; i < words.length; i++) {
-      if (!foundWords.has(i)) {
-        unfoundWordIndices.push(i)
+    // For single player mode, require payment
+    if (gameMode === 'singleplayer' && walletHook) {
+      if (!walletHook.account) {
+        alert('Please connect your MetaMask wallet to use hints.')
+        return
+      }
+      
+      try {
+        // Payment recipient address (you can set this to your game's wallet)
+        const recipientAddress = '0x0000000000000000000000000000000000000000' // Replace with your address
+        
+        // Show confirmation
+        const confirmed = window.confirm(
+          `This hint costs 0.0001 ETH. Do you want to proceed?`
+        )
+        
+        if (!confirmed) return
+        
+        // Process payment
+        const txHash = await walletHook.payForHint(recipientAddress)
+        console.log('Hint payment successful:', txHash)
+        
+        // Show hint after payment
+        const unfoundWordIndices = []
+        for (let i = 0; i < words.length; i++) {
+          if (!foundWords.has(i)) {
+            unfoundWordIndices.push(i)
+          }
+        }
+        
+        if (unfoundWordIndices.length === 0) return
+        
+        let wordIndexToHint
+        if (currentHintWordIndexRef.current === -1 || foundWords.has(currentHintWordIndexRef.current)) {
+          wordIndexToHint = unfoundWordIndices[Math.floor(Math.random() * unfoundWordIndices.length)]
+          currentHintWordIndexRef.current = wordIndexToHint
+        } else {
+          wordIndexToHint = currentHintWordIndexRef.current
+        }
+        
+        const wordData = placedWordsRef.current[wordIndexToHint]
+        if (wordData) {
+          hintedCellsRef.current = [...wordData.cells]
+          setHintedCells([...wordData.cells])
+          
+          setHintCooldown(true)
+          
+          setTimeout(() => {
+            hintedCellsRef.current = []
+            setHintedCells([])
+            setHintCooldown(false)
+          }, 5000)
+        }
+      } catch (error) {
+        console.error('Hint payment failed:', error)
+        alert(`Payment failed: ${error.message}`)
+        return
+      }
+    } else {
+      // Multiplayer or no wallet - free hint
+      const unfoundWordIndices = []
+      for (let i = 0; i < words.length; i++) {
+        if (!foundWords.has(i)) {
+          unfoundWordIndices.push(i)
+        }
+      }
+      
+      if (unfoundWordIndices.length === 0) return
+      
+      let wordIndexToHint
+      if (currentHintWordIndexRef.current === -1 || foundWords.has(currentHintWordIndexRef.current)) {
+        wordIndexToHint = unfoundWordIndices[Math.floor(Math.random() * unfoundWordIndices.length)]
+        currentHintWordIndexRef.current = wordIndexToHint
+      } else {
+        wordIndexToHint = currentHintWordIndexRef.current
+      }
+      
+      const wordData = placedWordsRef.current[wordIndexToHint]
+      if (wordData) {
+        hintedCellsRef.current = [...wordData.cells]
+        setHintedCells([...wordData.cells])
+        
+        setHintCooldown(true)
+        
+        setTimeout(() => {
+          hintedCellsRef.current = []
+          setHintedCells([])
+          setHintCooldown(false)
+        }, 5000)
       }
     }
-    
-    if (unfoundWordIndices.length === 0) return
-    
-    let wordIndexToHint
-    if (currentHintWordIndexRef.current === -1 || foundWords.has(currentHintWordIndexRef.current)) {
-      wordIndexToHint = unfoundWordIndices[Math.floor(Math.random() * unfoundWordIndices.length)]
-      currentHintWordIndexRef.current = wordIndexToHint
-    } else {
-      wordIndexToHint = currentHintWordIndexRef.current
-    }
-    
-    const wordData = placedWordsRef.current[wordIndexToHint]
-    if (wordData) {
-      hintedCellsRef.current = [...wordData.cells]
-      setHintedCells([...wordData.cells])
-      
-      setHintCooldown(true)
-      
-      setTimeout(() => {
-        hintedCellsRef.current = []
-        setHintedCells([])
-        setHintCooldown(false)
-      }, 5000)
-    }
-  }, [gameStarted, hintCooldown, words, foundWords])
+  }, [gameStarted, hintCooldown, words, foundWords, gameMode])
 
   const addCustomWord = useCallback((word) => {
     const upperWord = word.trim().toUpperCase()

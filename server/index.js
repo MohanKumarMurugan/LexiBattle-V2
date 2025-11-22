@@ -15,7 +15,7 @@ const io = new Server(server, {
 })
 
 // Store rooms and players
-const rooms = new Map() // roomCode -> { players: Map<socketId, {role, score}>, gameState: {}, host: socketId, timer: {}, gameActive: false, usedWords: Set }
+const rooms = new Map() // roomCode -> { players: Map<socketId, {role, score, walletAddress, betPlaced, betAmount, txHash}>, gameState: {}, host: socketId, timer: {}, gameActive: false, usedWords: Set, gameWallet: '0x...' }
 
 // Master word pool
 const MASTER_WORD_POOL = [
@@ -143,6 +143,73 @@ function generateRoomCode() {
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id)
 
+  // Wallet connection handler
+  socket.on('playerWalletConnected', ({ walletAddress, role }) => {
+    console.log(`💰 Wallet connected: ${walletAddress} (${role})`)
+    // Find room for this socket
+    for (const [roomCode, room] of rooms.entries()) {
+      if (room.players.has(socket.id)) {
+        const player = room.players.get(socket.id)
+        player.walletAddress = walletAddress
+        player.role = role
+        io.to(roomCode).emit('playerWalletConnected', {
+          walletAddress,
+          role,
+          playerId: socket.id
+        })
+        break
+      }
+    }
+  })
+
+  // Bet placement handler
+  socket.on('playerBetPlaced', ({ walletAddress, betAmount, txHash, role }) => {
+    console.log(`🎲 Bet placed: ${walletAddress} - ${betAmount} ETH (${role})`)
+    // Find room for this socket
+    for (const [roomCode, room] of rooms.entries()) {
+      if (room.players.has(socket.id)) {
+        const player = room.players.get(socket.id)
+        player.walletAddress = walletAddress
+        player.betPlaced = true
+        player.betAmount = betAmount
+        player.txHash = txHash
+        player.role = role
+        
+        io.to(roomCode).emit('playerBetPlaced', {
+          walletAddress,
+          betAmount,
+          txHash,
+          role,
+          playerId: socket.id
+        })
+        
+        // Check if both players have placed bets
+        const players = Array.from(room.players.values())
+        const hostBet = players.find(p => p.role === 'host' && p.betPlaced)
+        const guestBet = players.find(p => p.role === 'guest' && p.betPlaced)
+        
+        if (hostBet && guestBet && hostBet.betAmount === guestBet.betAmount) {
+          const hostBetAmount = parseFloat(hostBet.betAmount) || 0
+          const guestBetAmount = parseFloat(guestBet.betAmount) || 0
+          room.totalPot = (hostBetAmount + guestBetAmount).toString()
+          
+          io.to(roomCode).emit('bothPlayersReady', {
+            totalPot: room.totalPot,
+            betAmount: hostBet.betAmount,
+            isFreeBet: hostBetAmount === 0 && guestBetAmount === 0
+          })
+          
+          if (room.totalPot === '0') {
+            console.log(`✅ Both players ready in room ${roomCode}. Friendly match (Free bet)`)
+          } else {
+            console.log(`✅ Both players ready in room ${roomCode}. Total pot: ${room.totalPot} ETH`)
+          }
+        }
+        break
+      }
+    }
+  })
+
   // Create a new room (Host)
   socket.on('createRoom', () => {
     try {
@@ -165,7 +232,11 @@ io.on('connection', (socket) => {
         role: 'host', 
         score: 0,
         wordsFound: 0,
-        currentRound: 1
+        currentRound: 1,
+        walletAddress: null,
+        betPlaced: false,
+        betAmount: null,
+        txHash: null
       })
 
       rooms.set(roomCode, {
@@ -177,7 +248,9 @@ io.on('connection', (socket) => {
         timerInterval: null,
         usedWords: new Set(), // Track all words used across all rounds for both players
         hostUsedWords: new Set(), // Track words used by host
-        guestUsedWords: new Set() // Track words used by guest
+        guestUsedWords: new Set(), // Track words used by guest
+        totalPot: '0',
+        gameWallet: '0x0000000000000000000000000000000000000000' // Replace with your game wallet address
       })
 
       socket.join(roomCode)
@@ -208,12 +281,16 @@ io.on('connection', (socket) => {
       return
     }
 
-        room.players.set(socket.id, { 
-          role: 'guest', 
-          score: 0,
-          wordsFound: 0,
-          currentRound: 1
-        })
+      room.players.set(socket.id, {
+        role: 'guest',
+        score: 0,
+        wordsFound: 0,
+        currentRound: 1,
+        walletAddress: null,
+        betPlaced: false,
+        betAmount: null,
+        txHash: null
+      })
     socket.join(roomCode)
     
     socket.emit('guestJoinedRoom', { 
@@ -450,6 +527,44 @@ io.on('connection', (socket) => {
             wordsFound: loser.wordsFound,
             role: loser.role
           }
+        }
+
+        // Process payout (only if there's a bet)
+        if (room.totalPot && room.totalPot !== '0') {
+          if (!isTie) {
+            const winner = scoresArray[0]
+            const winnerPlayer = room.players.get(winner.id)
+            
+            if (winnerPlayer && winnerPlayer.walletAddress) {
+              // Emit payout event (actual payout would be handled by smart contract or backend service)
+              io.to(roomCode).emit('winnerPayout', {
+                winnerWallet: winnerPlayer.walletAddress,
+                totalPot: room.totalPot,
+                winnerRole: winner.role,
+                winnerScore: winner.score
+              })
+              console.log(`💰 Payout: ${winnerPlayer.walletAddress} wins ${room.totalPot} ETH`)
+            }
+          } else {
+            // Split pot on tie
+            const players = Array.from(room.players.values())
+            const hostPlayer = players.find(p => p.role === 'host')
+            const guestPlayer = players.find(p => p.role === 'guest')
+            
+            if (hostPlayer && guestPlayer && hostPlayer.walletAddress && guestPlayer.walletAddress) {
+              const splitAmount = (parseFloat(room.totalPot) / 2).toString()
+              io.to(roomCode).emit('tiePayout', {
+                hostWallet: hostPlayer.walletAddress,
+                guestWallet: guestPlayer.walletAddress,
+                splitAmount: splitAmount,
+                totalPot: room.totalPot
+              })
+              console.log(`💰 Tie payout: Each player receives ${splitAmount} ETH`)
+            }
+          }
+        } else {
+          // Free bet - no payout needed
+          console.log(`🎮 Friendly match completed in room ${roomCode}. No payout (free bet)`)
         }
 
         io.to(roomCode).emit('finalResults', result)
@@ -713,6 +828,44 @@ io.on('connection', (socket) => {
             wordsFound: loser.wordsFound,
             role: loser.role
           }
+        }
+
+        // Process payout (only if there's a bet)
+        if (room.totalPot && room.totalPot !== '0') {
+          if (!isTie) {
+            const winner = scoresArray[0]
+            const winnerPlayer = room.players.get(winner.id)
+            
+            if (winnerPlayer && winnerPlayer.walletAddress) {
+              // Emit payout event (actual payout would be handled by smart contract or backend service)
+              io.to(roomCode).emit('winnerPayout', {
+                winnerWallet: winnerPlayer.walletAddress,
+                totalPot: room.totalPot,
+                winnerRole: winner.role,
+                winnerScore: winner.score
+              })
+              console.log(`💰 Payout: ${winnerPlayer.walletAddress} wins ${room.totalPot} ETH`)
+            }
+          } else {
+            // Split pot on tie
+            const players = Array.from(room.players.values())
+            const hostPlayer = players.find(p => p.role === 'host')
+            const guestPlayer = players.find(p => p.role === 'guest')
+            
+            if (hostPlayer && guestPlayer && hostPlayer.walletAddress && guestPlayer.walletAddress) {
+              const splitAmount = (parseFloat(room.totalPot) / 2).toString()
+              io.to(roomCode).emit('tiePayout', {
+                hostWallet: hostPlayer.walletAddress,
+                guestWallet: guestPlayer.walletAddress,
+                splitAmount: splitAmount,
+                totalPot: room.totalPot
+              })
+              console.log(`💰 Tie payout: Each player receives ${splitAmount} ETH`)
+            }
+          }
+        } else {
+          // Free bet - no payout needed
+          console.log(`🎮 Friendly match completed in room ${roomCode}. No payout (free bet)`)
         }
 
         io.to(roomCode).emit('finalResults', result)
