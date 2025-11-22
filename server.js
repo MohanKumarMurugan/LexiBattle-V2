@@ -15,7 +15,21 @@ const io = new Server(server, {
 })
 
 // Store rooms and players
-const rooms = new Map() // roomCode -> { players: Map<socketId, {role, score}>, gameState: {}, host: socketId, timer: {}, gameActive: false }
+const rooms = new Map() // roomCode -> { players: Map<socketId, {role, score}>, gameState: {}, host: socketId, timer: {}, gameActive: false, usedWords: Set }
+
+// Master word pool (expanded for more variety)
+const MASTER_WORD_POOL = [
+  'CAT', 'DOG', 'SUN', 'MOON', 'TREE', 'BOOK', 'FISH', 'BIRD', 'STAR', 'CLOUD',
+  'COMPUTER', 'RAINBOW', 'OCEAN', 'MOUNTAIN', 'GARDEN', 'PLANET', 'CRYSTAL', 'THUNDER', 'VOLCANO', 'FOREST',
+  'JAVASCRIPT', 'ALGORITHM', 'ADVENTURE', 'BUTTERFLY', 'KNOWLEDGE', 'TELESCOPE', 'SYMPHONY', 'MYSTERY', 'DISCOVERY', 'EXPLORATION',
+  'PYTHON', 'REACT', 'NODEJS', 'MONGODB', 'EXPRESS', 'SOCKET', 'WEBSOCKET', 'DATABASE', 'GRAPHQL', 'TYPESCRIPT',
+  'FRONTEND', 'BACKEND', 'FULLSTACK', 'DEVELOPER', 'PROGRAMMER', 'SOFTWARE', 'HARDWARE', 'NETWORK', 'SECURITY', 'ENCRYPTION',
+  'AUTHENTICATION', 'VALIDATION', 'OPTIMIZATION', 'PERFORMANCE', 'SCALABILITY', 'RELIABILITY', 'EFFICIENCY', 'FUNCTIONALITY',
+  'ARCHITECTURE', 'FRAMEWORK', 'LIBRARY', 'COMPONENT', 'INTERFACE', 'PROTOCOL', 'ENDPOINT', 'RESPONSE', 'REQUEST', 'PAYLOAD',
+  'VARIABLE', 'FUNCTION', 'OBJECT', 'ARRAY', 'STRING', 'NUMBER', 'BOOLEAN', 'PROMISE', 'ASYNC', 'AWAIT',
+  'ELEPHANT', 'TIGER', 'LION', 'PANDA', 'KOALA', 'DOLPHIN', 'EAGLE', 'SHARK', 'WHALE', 'PENGUIN',
+  'CHOCOLATE', 'VANILLA', 'STRAWBERRY', 'BANANA', 'ORANGE', 'APPLE', 'GRAPE', 'WATERMELON', 'PINEAPPLE', 'MANGO'
+].map(w => w.toUpperCase())
 
 // Generate random room code
 function generateRoomCode() {
@@ -48,7 +62,12 @@ io.on('connection', (socket) => {
       }
 
       const players = new Map()
-      players.set(socket.id, { role: 'host', score: 0 })
+      players.set(socket.id, { 
+        role: 'host', 
+        score: 0,
+        wordsFound: 0,
+        currentRound: 1
+      })
 
       rooms.set(roomCode, {
         players,
@@ -56,7 +75,10 @@ io.on('connection', (socket) => {
         host: socket.id,
         timer: null,
         gameActive: false,
-        timerInterval: null
+        timerInterval: null,
+        usedWords: new Set(), // Track all words used across all rounds for both players
+        hostUsedWords: new Set(), // Track words used by host
+        guestUsedWords: new Set() // Track words used by guest
       })
 
       socket.join(roomCode)
@@ -87,7 +109,12 @@ io.on('connection', (socket) => {
       return
     }
 
-    room.players.set(socket.id, { role: 'guest', score: 0 })
+        room.players.set(socket.id, { 
+          role: 'guest', 
+          score: 0,
+          wordsFound: 0,
+          currentRound: 1
+        })
     socket.join(roomCode)
     
     socket.emit('guestJoinedRoom', { 
@@ -103,6 +130,108 @@ io.on('connection', (socket) => {
 
     console.log(`Guest ${socket.id} joined room ${roomCode}`)
   })
+
+  // Generate unique word sets for host and guest (ensuring no overlap)
+  function generateUniqueWordSets(room) {
+    // Get all words that have been used in this room
+    const allUsedWords = new Set([...room.usedWords])
+    
+    // Filter out used words from master pool
+    const availableWords = MASTER_WORD_POOL.filter(w => !allUsedWords.has(w))
+    
+    if (availableWords.length < 16) {
+      // If we're running low on words, reset the used words set (but keep player-specific tracking)
+      console.log('⚠️ Running low on words, resetting room used words pool')
+      room.usedWords.clear()
+      // But keep player-specific tracking to avoid immediate repeats
+      const playerUsedWords = new Set([...room.hostUsedWords, ...room.guestUsedWords])
+      const freshWords = MASTER_WORD_POOL.filter(w => !playerUsedWords.has(w))
+      if (freshWords.length >= 16) {
+        const shuffled = [...freshWords].sort(() => Math.random() - 0.5)
+        const hostWords = shuffled.slice(0, 8)
+        const guestWords = shuffled.slice(8, 16)
+        
+        // Update tracking
+        hostWords.forEach(w => {
+          room.usedWords.add(w)
+          room.hostUsedWords.add(w)
+        })
+        guestWords.forEach(w => {
+          room.usedWords.add(w)
+          room.guestUsedWords.add(w)
+        })
+        
+        return { hostWords, guestWords }
+      }
+    }
+    
+    // Shuffle available words and select unique sets
+    const shuffled = [...availableWords].sort(() => Math.random() - 0.5)
+    const hostWords = shuffled.slice(0, 8)
+    const guestWords = shuffled.slice(8, 16)
+    
+    // Update tracking
+    hostWords.forEach(w => {
+      room.usedWords.add(w)
+      room.hostUsedWords.add(w)
+    })
+    guestWords.forEach(w => {
+      room.usedWords.add(w)
+      room.guestUsedWords.add(w)
+    })
+    
+    return { hostWords, guestWords }
+  }
+
+  // Generate new unique words for a player (for chain-rounds)
+  function generateNewWordsForPlayer(room, role) {
+    const playerUsedWords = role === 'host' ? room.hostUsedWords : room.guestUsedWords
+    
+    // Get words not used by this player
+    const availableWords = MASTER_WORD_POOL.filter(w => !playerUsedWords.has(w))
+    
+    if (availableWords.length < 8) {
+      // Reset player-specific tracking if needed
+      console.log(`⚠️ Running low on words for ${role}, resetting player word pool`)
+      if (role === 'host') {
+        room.hostUsedWords.clear()
+      } else {
+        room.guestUsedWords.clear()
+      }
+      // Use all words except those used by opponent
+      const opponentUsedWords = role === 'host' ? room.guestUsedWords : room.hostUsedWords
+      const freshWords = MASTER_WORD_POOL.filter(w => !opponentUsedWords.has(w))
+      const shuffled = [...freshWords].sort(() => Math.random() - 0.5)
+      const newWords = shuffled.slice(0, 8)
+      
+      // Update tracking
+      newWords.forEach(w => {
+        room.usedWords.add(w)
+        if (role === 'host') {
+          room.hostUsedWords.add(w)
+        } else {
+          room.guestUsedWords.add(w)
+        }
+      })
+      
+      return newWords
+    }
+    
+    const shuffled = [...availableWords].sort(() => Math.random() - 0.5)
+    const newWords = shuffled.slice(0, 8)
+    
+    // Update tracking
+    newWords.forEach(w => {
+      room.usedWords.add(w)
+      if (role === 'host') {
+        room.hostUsedWords.add(w)
+      } else {
+        room.guestUsedWords.add(w)
+      }
+    })
+    
+    return newWords
+  }
 
   // Host starts the game
   socket.on('hostStartGame', ({ roomCode }) => {
@@ -131,47 +260,222 @@ io.on('connection', (socket) => {
     // Mark game as active
     room.gameActive = true
 
-    // Reset scores
+    // Reset scores and words found
     room.players.forEach((playerData) => {
       playerData.score = 0
+      playerData.wordsFound = 0
+      playerData.currentRound = 1
     })
 
-    // Broadcast to all players in room
-    io.to(roomCode).emit('hostStartGame', {
-      message: 'Game starting!'
+    // Reset word tracking for new game
+    room.usedWords.clear()
+    room.hostUsedWords.clear()
+    room.guestUsedWords.clear()
+
+    // Generate unique word sets (no overlap between host and guest)
+    const { hostWords, guestWords } = generateUniqueWordSets(room)
+    
+    // Store word sets in room
+    room.hostWords = hostWords
+    room.guestWords = guestWords
+
+    // Find host and guest socket IDs
+    const hostId = room.host
+    const guestId = Array.from(room.players.keys()).find(id => id !== hostId)
+
+    // Send different boards to host and guest FIRST
+    console.log(`📤 Sending host board to ${hostId}`)
+    socket.emit('generateBoards', {
+      words: hostWords,
+      role: 'host'
     })
+
+    if (guestId) {
+      console.log(`📤 Sending guest board to ${guestId}`)
+      io.to(guestId).emit('generateBoards', {
+        words: guestWords,
+        role: 'guest'
+      })
+    }
+
+    // Start the timer immediately
+    if (room.timerInterval) {
+      clearInterval(room.timerInterval)
+    }
+
+    const duration = 60 // 60 seconds
+    room.timer = {
+      timeRemaining: duration,
+      isRunning: true,
+      startTime: Date.now()
+    }
+
+    // Broadcast initial timer
+    io.to(roomCode).emit('timerSync', {
+      timeRemaining: duration,
+      isRunning: true
+    })
+
+    // Start countdown
+    room.timerInterval = setInterval(() => {
+      if (!room.timer) return
+
+      const elapsed = Math.floor((Date.now() - room.timer.startTime) / 1000)
+      const remaining = Math.max(0, duration - elapsed)
+
+      room.timer.timeRemaining = remaining
+
+      io.to(roomCode).emit('timerSync', {
+        timeRemaining: remaining,
+        isRunning: remaining > 0
+      })
+
+      // Timer ended
+      if (remaining === 0) {
+        clearInterval(room.timerInterval)
+        room.timer.isRunning = false
+        room.gameActive = false
+
+        // Get final scores
+        const finalScores = {}
+        room.players.forEach((playerData, id) => {
+          finalScores[id] = {
+            score: playerData.score,
+            role: playerData.role
+          }
+        })
+
+        // Determine winner (handle ties)
+        const scoresArray = Array.from(room.players.entries()).map(([id, data]) => ({
+          id,
+          score: data.score,
+          wordsFound: data.wordsFound || 0,
+          role: data.role
+        }))
+        
+        scoresArray.sort((a, b) => {
+          // First sort by score, then by words found
+          if (b.score !== a.score) return b.score - a.score
+          return b.wordsFound - a.wordsFound
+        })
+        
+        const isTie = scoresArray.length === 2 && 
+                      scoresArray[0].score === scoresArray[1].score &&
+                      scoresArray[0].wordsFound === scoresArray[1].wordsFound
+
+        const result = {
+          scores: finalScores,
+          isTie,
+          hostScore: scoresArray.find(p => p.role === 'host')?.score || 0,
+          guestScore: scoresArray.find(p => p.role === 'guest')?.score || 0,
+          hostWordsFound: scoresArray.find(p => p.role === 'host')?.wordsFound || 0,
+          guestWordsFound: scoresArray.find(p => p.role === 'guest')?.wordsFound || 0
+        }
+
+        if (!isTie) {
+          const winner = scoresArray[0]
+          const loser = scoresArray[1]
+          result.winner = {
+            id: winner.id,
+            score: winner.score,
+            wordsFound: winner.wordsFound,
+            role: winner.role
+          }
+          result.loser = {
+            id: loser.id,
+            score: loser.score,
+            wordsFound: loser.wordsFound,
+            role: loser.role
+          }
+        }
+
+        io.to(roomCode).emit('finalResults', result)
+
+        if (isTie) {
+          console.log(`Game ended in room ${roomCode}. TIE! Both players scored ${scoresArray[0].score} points`)
+        } else {
+          console.log(`Game ended in room ${roomCode}. Winner: ${scoresArray[0].role} (${scoresArray[0].id}) with ${scoresArray[0].score} points`)
+        }
+      }
+    }, 1000)
+
+    // Wait a moment for boards to be generated, then broadcast game start
+    setTimeout(() => {
+      console.log(`📢 Broadcasting game start to room ${roomCode}`)
+      io.to(roomCode).emit('hostStartGame', {
+        message: 'Game starting!',
+        roomCode
+      })
+    }, 500) // Small delay to ensure boards are received first
 
     console.log(`✅ Game started in room ${roomCode} by host ${socket.id}`)
+    console.log(`   Host words: ${hostWords.join(', ')}`)
+    console.log(`   Guest words: ${guestWords.join(', ')}`)
+    console.log(`   ⏱️ Timer started: 60 seconds`)
   })
 
-  // Word found by a player
-  socket.on('wordFound', ({ roomCode, wordIndex, playerId }) => {
+    // Word found by a player
+  socket.on('wordFound', ({ roomCode, wordIndex, word, playerId }) => {
     if (!roomCode || !rooms.has(roomCode)) return
 
     const room = rooms.get(roomCode)
     const player = room.players.get(playerId || socket.id)
     
-    if (!player) return
+    if (!player || !room.gameActive) return
 
     // Add points (10 points per word)
     player.score += 10
+    player.wordsFound = (player.wordsFound || 0) + 1
 
     // Broadcast score update
     const scores = {}
     room.players.forEach((playerData, id) => {
       scores[id] = {
         score: playerData.score,
-        role: playerData.role
+        role: playerData.role,
+        wordsFound: playerData.wordsFound || 0
       }
     })
 
     io.to(roomCode).emit('updateScores', {
       scores,
       foundWordIndex: wordIndex,
+      foundWord: word,
       foundBy: playerId || socket.id
     })
 
-    console.log(`Word ${wordIndex} found by ${playerId || socket.id} in room ${roomCode}. Score: ${player.score}`)
+    console.log(`Word "${word}" (index ${wordIndex}) found by ${playerId || socket.id} in room ${roomCode}. Score: ${player.score}, Words found: ${player.wordsFound}`)
+  })
+
+  // Round complete - player found all words, generate new board (chain-round mechanic)
+  socket.on('roundComplete', ({ roomCode, playerId, role }) => {
+    if (!roomCode || !rooms.has(roomCode)) return
+
+    const room = rooms.get(roomCode)
+    const player = room.players.get(playerId || socket.id)
+    
+    if (!player || !room.gameActive) return
+
+    // Check if timer is still running
+    if (!room.timer || room.timer.timeRemaining <= 0) {
+      console.log(`⏱️ Timer ended, cannot start new round for ${role}`)
+      return
+    }
+
+    // Generate new unique words for this player (ensuring no overlap with opponent)
+    const newWords = generateNewWordsForPlayer(room, role)
+
+    // Update player's current round
+    player.currentRound = (player.currentRound || 1) + 1
+
+    // Send new board words to this player only (they'll generate the board client-side)
+    io.to(playerId || socket.id).emit('nextBoard', {
+      words: newWords,
+      round: player.currentRound,
+      message: `Round ${player.currentRound} started! Keep going!`
+    })
+
+    console.log(`🔄 Round ${player.currentRound} started for ${role} ${playerId || socket.id} in room ${roomCode}. New words: ${newWords.join(', ')}`)
   })
 
   // Timer sync (server maintains master timer)
@@ -188,6 +492,44 @@ io.on('connection', (socket) => {
     }
   })
 
+  // Generate unique boards event (for explicit board generation requests)
+  socket.on('generateUniqueBoards', ({ roomCode }) => {
+    if (!roomCode || !rooms.has(roomCode)) return
+
+    const room = rooms.get(roomCode)
+    
+    if (room.host !== socket.id) {
+      socket.emit('generateError', { error: 'Only host can request board generation' })
+      return
+    }
+
+    // Generate unique word sets
+    const { hostWords, guestWords } = generateUniqueWordSets(room)
+    
+    // Store word sets
+    room.hostWords = hostWords
+    room.guestWords = guestWords
+
+    // Find host and guest socket IDs
+    const hostId = room.host
+    const guestId = Array.from(room.players.keys()).find(id => id !== hostId)
+
+    // Send different word sets to host and guest
+    io.to(hostId).emit('generateBoards', {
+      words: hostWords,
+      role: 'host'
+    })
+
+    if (guestId) {
+      io.to(guestId).emit('generateBoards', {
+        words: guestWords,
+        role: 'guest'
+      })
+    }
+
+    console.log(`📤 Generated unique boards for room ${roomCode}`)
+  })
+
   // Start timer (called by host)
   socket.on('startTimer', ({ roomCode, duration = 60 }) => {
     if (!roomCode || !rooms.has(roomCode)) return
@@ -195,6 +537,12 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomCode)
     
     if (room.host !== socket.id) return
+
+    // Don't start a new timer if one is already running
+    if (room.timer && room.timer.isRunning) {
+      console.log(`⏱️ Timer already running in room ${roomCode}, ignoring startTimer request`)
+      return
+    }
 
     // Clear existing timer if any
     if (room.timerInterval) {
@@ -242,53 +590,61 @@ io.on('connection', (socket) => {
           }
         })
 
-        // Determine winner
+        // Determine winner (handle ties)
         const scoresArray = Array.from(room.players.entries()).map(([id, data]) => ({
           id,
           score: data.score,
+          wordsFound: data.wordsFound || 0,
           role: data.role
         }))
         
-        scoresArray.sort((a, b) => b.score - a.score)
-        const winner = scoresArray[0]
-        const loser = scoresArray[1]
+        scoresArray.sort((a, b) => {
+          // First sort by score, then by words found
+          if (b.score !== a.score) return b.score - a.score
+          return b.wordsFound - a.wordsFound
+        })
+        
+        const isTie = scoresArray.length === 2 && 
+                      scoresArray[0].score === scoresArray[1].score &&
+                      scoresArray[0].wordsFound === scoresArray[1].wordsFound
 
-        io.to(roomCode).emit('finalResults', {
+        const result = {
           scores: finalScores,
-          winner: {
+          isTie,
+          hostScore: scoresArray.find(p => p.role === 'host')?.score || 0,
+          guestScore: scoresArray.find(p => p.role === 'guest')?.score || 0,
+          hostWordsFound: scoresArray.find(p => p.role === 'host')?.wordsFound || 0,
+          guestWordsFound: scoresArray.find(p => p.role === 'guest')?.wordsFound || 0
+        }
+
+        if (!isTie) {
+          const winner = scoresArray[0]
+          const loser = scoresArray[1]
+          result.winner = {
             id: winner.id,
             score: winner.score,
+            wordsFound: winner.wordsFound,
             role: winner.role
-          },
-          loser: {
+          }
+          result.loser = {
             id: loser.id,
             score: loser.score,
+            wordsFound: loser.wordsFound,
             role: loser.role
           }
-        })
+        }
 
-        console.log(`Game ended in room ${roomCode}. Winner: ${winner.id} with ${winner.score} points`)
+        io.to(roomCode).emit('finalResults', result)
+
+        if (isTie) {
+          console.log(`Game ended in room ${roomCode}. TIE! Both players scored ${scoresArray[0].score} points`)
+        } else {
+          console.log(`Game ended in room ${roomCode}. Winner: ${scoresArray[0].role} (${scoresArray[0].id}) with ${scoresArray[0].score} points`)
+        }
       }
     }, 1000)
   })
 
-  // Round complete (all words found, start new round)
-  socket.on('roundComplete', ({ roomCode, boardData }) => {
-    if (!roomCode || !rooms.has(roomCode)) return
-
-    const room = rooms.get(roomCode)
-    
-    if (!room.gameActive) return
-
-    // Broadcast new round
-    io.to(roomCode).emit('roundComplete', {
-      newBoard: boardData.grid,
-      newWords: boardData.words,
-      message: 'New round started!'
-    })
-
-    console.log(`New round started in room ${roomCode}`)
-  })
 
   // Leave room
   socket.on('leaveRoom', ({ roomCode }) => {

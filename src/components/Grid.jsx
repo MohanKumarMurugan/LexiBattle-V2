@@ -7,6 +7,7 @@ function Grid({
   gameStarted,
   selectedCells,
   hintedCells,
+  wordColors,
   onCellMouseDown,
   onCellMouseOver,
   onCellMouseUp
@@ -49,6 +50,7 @@ function Grid({
             col={colIndex}
             letter={cell.letter}
             found={cell.found}
+            foundColor={cell.foundColor}
             isSelected={isCellSelected(rowIndex, colIndex)}
             isHinted={isCellHinted(rowIndex, colIndex)}
             onMouseDown={() => onCellMouseDown(rowIndex, colIndex)}

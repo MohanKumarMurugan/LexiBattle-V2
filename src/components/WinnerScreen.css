@@ -123,6 +123,13 @@
   letter-spacing: 1px;
 }
 
+.words-found-count {
+  margin-top: 8px;
+  font-size: 0.9em;
+  color: #4a5568;
+  font-weight: 600;
+}
+
 .winner-indicator {
   margin-top: 15px;
   padding: 8px 20px;
@@ -159,6 +166,34 @@
   font-weight: 600;
 }
 
+.winner-actions {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin-top: 30px;
+  flex-wrap: wrap;
+}
+
+.play-again-btn {
+  padding: 18px 50px;
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+  border: none;
+  border-radius: 15px;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 6px 20px rgba(72, 187, 120, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.play-again-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(72, 187, 120, 0.6);
+}
+
 .back-to-menu-btn-large {
   padding: 18px 50px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -172,7 +207,6 @@
   box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
   text-transform: uppercase;
   letter-spacing: 1px;
-  margin-top: 30px;
 }
 
 .back-to-menu-btn-large:hover {

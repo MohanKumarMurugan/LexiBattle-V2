@@ -7,6 +7,7 @@ function GameBoard({
   gameStarted,
   selectedCells,
   hintedCells,
+  wordColors,
   onCellMouseDown,
   onCellMouseOver,
   onCellMouseUp,
@@ -20,6 +21,7 @@ function GameBoard({
         gameStarted={gameStarted}
         selectedCells={selectedCells}
         hintedCells={hintedCells}
+        wordColors={wordColors}
         onCellMouseDown={onCellMouseDown}
         onCellMouseOver={onCellMouseOver}
         onCellMouseUp={onCellMouseUp}

@@ -22,9 +22,12 @@ function MultiplayerGame({
     timer,
     hostScore,
     guestScore,
+    hostWordsFound,
+    guestWordsFound,
     currentSelection,
     selectedCells,
     hintedCells,
+    wordColors,
     handleCellMouseDown,
     handleCellMouseOver,
     handleCellMouseUp,
@@ -40,8 +43,14 @@ function MultiplayerGame({
           winnerData={winnerData}
           hostScore={hostScore}
           guestScore={guestScore}
+          hostWordsFound={hostWordsFound}
+          guestWordsFound={guestWordsFound}
           role={role}
           onBackToMenu={onBackToMenu}
+          onPlayAgain={() => {
+            // Reset game state and go back to multiplayer menu
+            window.location.reload()
+          }}
         />
       ) : (
         <>
@@ -129,9 +138,10 @@ function MultiplayerGame({
                       grid={grid}
                       gridSize={10}
                       gameStarted={gameStarted}
-                      selectedCells={selectedCells}
-                      hintedCells={hintedCells}
-                      onCellMouseDown={handleCellMouseDown}
+                    selectedCells={selectedCells}
+                    hintedCells={hintedCells}
+                    wordColors={wordColors}
+                    onCellMouseDown={handleCellMouseDown}
                       onCellMouseOver={handleCellMouseOver}
                       onCellMouseUp={handleCellMouseUp}
                       onStartGame={() => {}}
