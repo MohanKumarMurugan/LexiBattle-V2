@@ -14,6 +14,7 @@ function Header({
   gameMode,
   roomCode,
   onBackToMenu,
+  onSwitchToMultiplayer,
   walletAddress,
   onWalletConnect
 }) {
@@ -60,17 +61,31 @@ function Header({
       </div>
       <div className="game-controls">
         <div className="mode-selector">
+          {gameMode === 'singleplayer' ? (
+            <button
+              className="mode-btn switch-multiplayer-btn"
+              onClick={() => {
+                if (onSwitchToMultiplayer) onSwitchToMultiplayer()
+                else onModeChange('random')
+              }}
+            >
+              Switch to Multiplayer
+            </button>
+          ) : (
+            <button
+              className={`mode-btn ${currentMode === 'random' ? 'active' : ''}`}
+              onClick={() => onModeChange('random')}
+            >
+              Random Mode
+            </button>
+          )}
+
+          {/* Toggle button: shows 'Custom Mode' or 'Random Mode' depending on currentMode */}
           <button
-            className={`mode-btn ${currentMode === 'random' ? 'active' : ''}`}
-            onClick={() => onModeChange('random')}
+            className={`mode-btn mode-toggle-btn ${currentMode === 'custom' ? 'active' : ''}`}
+            onClick={() => onModeChange(currentMode === 'custom' ? 'random' : 'custom')}
           >
-            Random Mode
-          </button>
-          <button
-            className={`mode-btn ${currentMode === 'custom' ? 'active' : ''}`}
-            onClick={() => onModeChange('custom')}
-          >
-            Custom Mode
+            {currentMode === 'custom' ? 'Random Mode' : 'Custom Mode'}
           </button>
         </div>
         

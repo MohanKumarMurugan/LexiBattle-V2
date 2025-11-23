@@ -139,6 +139,7 @@ function App() {
         gameMode={gameMode}
         roomCode={roomCode}
         onBackToMenu={handleBackToMenu}
+        onSwitchToMultiplayer={handleMultiplayer}
       />
 
       <main className="game-area">
