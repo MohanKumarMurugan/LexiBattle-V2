@@ -3,6 +3,21 @@ import { ethers } from 'ethers'
 
 const HINT_COST = ethers.parseEther('0.0001') // 0.0001 ETH
 
+// Testnet configuration
+const TESTNET_CONFIG = {
+  chainId: '0xaa36a7', // 11155111 in hex (Sepolia)
+  chainName: 'Sepolia',
+  nativeCurrency: {
+    name: 'ETH',
+    symbol: 'ETH',
+    decimals: 18
+  },
+  rpcUrls: ['https://rpc.sepolia.org'],
+  blockExplorerUrls: ['https://sepolia.etherscan.io']
+}
+
+const TESTNET_CHAIN_ID = 11155111 // Sepolia testnet
+
 export function useWallet() {
   const [account, setAccount] = useState(null)
   const [provider, setProvider] = useState(null)
@@ -10,6 +25,7 @@ export function useWallet() {
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState(null)
   const [chainId, setChainId] = useState(null)
+  const [isTestnet, setIsTestnet] = useState(false)
 
   // Check if MetaMask is installed
   const checkMetaMask = useCallback(() => {
@@ -17,6 +33,51 @@ export function useWallet() {
       return true
     }
     return false
+  }, [])
+
+  // Switch to testnet
+  const switchToTestnet = useCallback(async () => {
+    if (!checkMetaMask()) {
+      setError('MetaMask is not installed. Please install MetaMask to continue.')
+      return false
+    }
+
+    try {
+      const ethereum = window.ethereum
+      
+      // Try to switch to testnet
+      await ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: TESTNET_CONFIG.chainId }]
+      })
+      
+      return true
+    } catch (switchError) {
+      // This error code indicates that the chain has not been added to MetaMask
+      if (switchError.code === 4902) {
+        try {
+          // Add the testnet to MetaMask
+          await ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [TESTNET_CONFIG]
+          })
+          return true
+        } catch (addError) {
+          console.error('Error adding testnet:', addError)
+          setError('Failed to add testnet. Please add Sepolia testnet manually in MetaMask.')
+          return false
+        }
+      } else {
+        console.error('Error switching to testnet:', switchError)
+        setError('Failed to switch to testnet. Please switch manually in MetaMask.')
+        return false
+      }
+    }
+  }, [checkMetaMask])
+
+  // Check if connected to testnet
+  const checkTestnet = useCallback((currentChainId) => {
+    return currentChainId === TESTNET_CHAIN_ID
   }, [])
 
   // Connect to MetaMask
@@ -45,16 +106,34 @@ export function useWallet() {
       const web3Provider = new ethers.BrowserProvider(ethereum)
       const web3Signer = await web3Provider.getSigner()
       const network = await web3Provider.getNetwork()
+      const currentChainId = Number(network.chainId)
       
       setProvider(web3Provider)
       setSigner(web3Signer)
       setAccount(accounts[0])
-      setChainId(Number(network.chainId))
+      setChainId(currentChainId)
+      setIsTestnet(checkTestnet(currentChainId))
+      
+      // Note: Auto-switching to testnet is disabled by default
+      // Users can manually switch using the button in the UI
+      // Uncomment below to enable auto-switch:
+      // if (!checkTestnet(currentChainId)) {
+      //   const switched = await switchToTestnet()
+      //   if (switched) {
+      //     // Reload to get updated chainId
+      //     window.location.reload()
+      //   }
+      // }
 
       // Listen for account changes
       ethereum.on('accountsChanged', (newAccounts) => {
         if (newAccounts.length === 0) {
-          disconnectWallet()
+          setAccount(null)
+          setProvider(null)
+          setSigner(null)
+          setChainId(null)
+          setIsTestnet(false)
+          setError(null)
         } else {
           setAccount(newAccounts[0])
           web3Provider.getSigner().then(setSigner)
@@ -62,8 +141,12 @@ export function useWallet() {
       })
 
       // Listen for chain changes
-      ethereum.on('chainChanged', () => {
-        window.location.reload()
+      ethereum.on('chainChanged', (newChainId) => {
+        const newChainIdNum = parseInt(newChainId, 16)
+        setIsTestnet(checkTestnet(newChainIdNum))
+        setChainId(newChainIdNum)
+        // Optionally reload on chain change
+        // window.location.reload()
       })
 
       setIsConnecting(false)
@@ -74,7 +157,7 @@ export function useWallet() {
       setIsConnecting(false)
       return false
     }
-  }, [checkMetaMask])
+  }, [checkMetaMask, checkTestnet, switchToTestnet])
 
   // Disconnect wallet
   const disconnectWallet = useCallback(() => {
@@ -82,6 +165,7 @@ export function useWallet() {
     setProvider(null)
     setSigner(null)
     setChainId(null)
+    setIsTestnet(false)
     setError(null)
   }, [])
 
@@ -174,9 +258,11 @@ export function useWallet() {
     isConnecting,
     error,
     chainId,
+    isTestnet,
     isConnected: !!account,
     connectWallet,
     disconnectWallet,
+    switchToTestnet,
     getBalance,
     payForHint,
     placeBet,

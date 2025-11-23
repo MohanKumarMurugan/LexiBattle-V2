@@ -3,9 +3,10 @@ import { useWallet } from '../hooks/useWallet'
 import './WalletConnect.css'
 
 function WalletConnect({ onConnect, onDisconnect, required = false, betAmount = null }) {
-  const { account, isConnecting, error, connectWallet, disconnectWallet, getBalance, isConnected } = useWallet()
+  const { account, isConnecting, error, connectWallet, disconnectWallet, getBalance, isConnected, chainId, isTestnet, switchToTestnet } = useWallet()
   const [balance, setBalance] = useState(null)
   const [shortAddress, setShortAddress] = useState('')
+  const [isSwitching, setIsSwitching] = useState(false)
 
   useEffect(() => {
     if (account) {
@@ -34,6 +35,20 @@ function WalletConnect({ onConnect, onDisconnect, required = false, betAmount = 
     }
   }
 
+  const handleSwitchToTestnet = async () => {
+    setIsSwitching(true)
+    await switchToTestnet()
+    setIsSwitching(false)
+  }
+
+  const getNetworkName = () => {
+    if (!chainId) return 'Unknown'
+    if (chainId === 11155111) return 'Sepolia'
+    if (chainId === 1) return 'Mainnet'
+    if (chainId === 5) return 'Goerli'
+    return `Chain ${chainId}`
+  }
+
   if (isConnected) {
     return (
       <div className="wallet-connected">
@@ -44,8 +59,20 @@ function WalletConnect({ onConnect, onDisconnect, required = false, betAmount = 
             {balance !== null && (
               <div className="wallet-balance">{parseFloat(balance).toFixed(4)} ETH</div>
             )}
+            <div className={`network-status ${isTestnet ? 'testnet' : 'mainnet'}`}>
+              {isTestnet ? '🧪 Testnet' : '🌐 ' + getNetworkName()}
+            </div>
           </div>
         </div>
+        {!isTestnet && (
+          <button 
+            className="wallet-switch-testnet-btn" 
+            onClick={handleSwitchToTestnet}
+            disabled={isSwitching}
+          >
+            {isSwitching ? 'Switching...' : 'Switch to Testnet'}
+          </button>
+        )}
         <button className="wallet-disconnect-btn" onClick={handleDisconnect}>
           Disconnect
         </button>
