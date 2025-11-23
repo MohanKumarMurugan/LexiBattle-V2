@@ -213,12 +213,12 @@ io.on('connection', (socket) => {
   // Create a new room (Host)
   socket.on('createRoom', () => {
     try {
-      let roomCode = generateRoomCode()
+      let roomCode = generateRoomCode().toUpperCase() // Normalize to uppercase
       let attempts = 0
       const maxAttempts = 10
       
       while (rooms.has(roomCode) && attempts < maxAttempts) {
-        roomCode = generateRoomCode()
+        roomCode = generateRoomCode().toUpperCase()
         attempts++
       }
 
@@ -269,10 +269,18 @@ io.on('connection', (socket) => {
       return
     }
 
-    const room = rooms.get(roomCode)
+    // Normalize room code to uppercase for consistency
+    const normalizedRoomCode = roomCode.toUpperCase().trim()
+    const room = rooms.get(normalizedRoomCode)
     
     if (!room) {
       socket.emit('joinError', { error: 'Room not found' })
+      return
+    }
+
+    // Check if socket is already in this room
+    if (room.players.has(socket.id)) {
+      socket.emit('joinError', { error: 'You are already in this room' })
       return
     }
 
@@ -291,20 +299,20 @@ io.on('connection', (socket) => {
         betAmount: null,
         txHash: null
       })
-    socket.join(roomCode)
+    socket.join(normalizedRoomCode)
     
     socket.emit('guestJoinedRoom', { 
-      roomCode,
+      roomCode: normalizedRoomCode,
       role: 'guest',
       hostId: room.host
     })
 
     // Notify host that guest joined
-    socket.to(roomCode).emit('opponentJoined', {
+    socket.to(normalizedRoomCode).emit('opponentJoined', {
       guestId: socket.id
     })
 
-    console.log(`Guest ${socket.id} joined room ${roomCode}`)
+    console.log(`✅ Guest ${socket.id} joined room ${normalizedRoomCode}`)
   })
 
   // Generate shared word set for both players (same puzzle)
@@ -587,8 +595,7 @@ io.on('connection', (socket) => {
     }, 500) // Small delay to ensure boards are received first
 
     console.log(`✅ Game started in room ${roomCode} by host ${socket.id}`)
-    console.log(`   Host words: ${hostWords.join(', ')}`)
-    console.log(`   Guest words: ${guestWords.join(', ')}`)
+    console.log(`   Shared words: ${sharedWords.join(', ')}`)
     console.log(`   ⏱️ Timer started: 60 seconds`)
   })
 

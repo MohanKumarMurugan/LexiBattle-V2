@@ -22,6 +22,20 @@ function MultiplayerMenu({
   
   const walletHook = useWallet()
 
+  // Clear error when wallet connects
+  useEffect(() => {
+    if (walletHook.account) {
+      // Clear wallet-related errors when wallet connects
+      if (error && (
+        error.includes('connect your MetaMask') || 
+        error.includes('MetaMask wallet') ||
+        error.includes('wallet')
+      )) {
+        setError('')
+      }
+    }
+  }, [walletHook.account, error])
+
   useEffect(() => {
     if (!socket) return
 
@@ -179,15 +193,19 @@ function MultiplayerMenu({
     }
     
     setError('')
+    setIsJoiningRoom(true)
     
     try {
-      // Place bet first
-      const recipientAddress = '0x0000000000000000000000000000000000000000' // Replace with your game wallet
-      setSuccess('Placing bet...')
-      const txHash = await walletHook.placeBet(recipientAddress, betAmount)
-      console.log('Bet placed:', txHash)
-      
-    setIsJoiningRoom(true)
+      // Place bet only if bet amount is greater than 0
+      let txHash = null
+      if (betAmount > 0) {
+        const recipientAddress = '0x0000000000000000000000000000000000000000' // Replace with your game wallet
+        setSuccess('Placing bet...')
+        txHash = await walletHook.placeBet(recipientAddress, betAmount)
+        console.log('Bet placed:', txHash)
+      } else {
+        setSuccess('Joining room with free bet...')
+      }
       
       // Emit wallet connection and bet
       socket.emit('playerWalletConnected', {
@@ -202,9 +220,17 @@ function MultiplayerMenu({
         role: 'guest'
       })
       
-    socket.emit('joinRoom', { roomCode: roomCode.trim().toUpperCase() })
+      socket.emit('joinRoom', { roomCode: roomCode.trim().toUpperCase() })
+      
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        if (isJoiningRoom) {
+          setIsJoiningRoom(false)
+          setError('Join request timed out. Please try again.')
+        }
+      }, 10000)
     } catch (err) {
-      setError(`Bet failed: ${err.message}`)
+      setError(`Failed to join: ${err.message}`)
       setIsJoiningRoom(false)
     }
   }
@@ -246,7 +272,12 @@ function MultiplayerMenu({
 
         <div className="wallet-section">
           <WalletConnect 
-            onConnect={() => {}}
+            onConnect={(account) => {
+              // Clear any wallet-related errors when wallet connects
+              if (account && error && error.includes('wallet')) {
+                setError('')
+              }
+            }}
             required={true}
             betAmount={betAmount}
           />
@@ -276,7 +307,7 @@ function MultiplayerMenu({
         <button 
           className="create-room-btn"
           onClick={handleCreateRoom}
-          disabled={isCreatingRoom || connectionStatus !== 'connected'}
+          disabled={isCreatingRoom || connectionStatus !== 'connected' || !walletHook.account}
         >
           {isCreatingRoom ? 'Creating...' : 'Create Room'}
         </button>
@@ -294,7 +325,7 @@ function MultiplayerMenu({
           <button
             className="join-room-btn"
             onClick={handleJoinRoom}
-            disabled={isJoiningRoom || !roomCode.trim() || connectionStatus !== 'connected'}
+            disabled={isJoiningRoom || !roomCode.trim() || connectionStatus !== 'connected' || !walletHook.account}
           >
             {isJoiningRoom ? 'Joining...' : 'Join Room'}
           </button>
@@ -303,7 +334,7 @@ function MultiplayerMenu({
         {success && (
           <div className="success-message">{success}</div>
         )}
-        {error && (
+        {error && !(error.includes('wallet') && walletHook.account) && (
           <div className="error-message">{error}</div>
         )}
         {createdRoomCode && (
